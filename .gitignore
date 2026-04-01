@@ -1,0 +1,17 @@
+node_modules/
+.idea/
+.vscode/
+.dart_tool/
+build/
+.DS_Store
+*.log
+.env
+.next/
+web/.next/
+web/node_modules/
+web/.env.local
+mobile/build/
+mobile/.dart_tool/
+mobile/.env.local
+mobile/.env
+supabase/.temp/
