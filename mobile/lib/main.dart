@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'config/api_config.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/feed_screen.dart';
@@ -10,8 +13,19 @@ import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'models/user_profile.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: ApiConfig.supabaseUrl,
+    anonKey: ApiConfig.supabaseAnonKey,
+    // Implicit flow: tokens are returned in the URL hash on redirect.
+    // PKCE (the default) loses the code verifier on page reload in Flutter Web.
+    authOptions: const FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.implicit,
+    ),
+  );
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -40,6 +54,24 @@ class _NexusAppState extends State<NexusApp> {
   void initState() {
     super.initState();
     _checkSession();
+
+    // On web: listen for Supabase auth state changes so that the OAuth
+    // redirect flow (which reloads the page) transitions to home automatically.
+    if (kIsWeb) {
+      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        if (data.event == AuthChangeEvent.signedIn &&
+            _authState != _AuthState.authenticated) {
+          _checkSession();
+        } else if (data.event == AuthChangeEvent.signedOut) {
+          if (mounted) {
+            setState(() {
+              _authState = _AuthState.unauthenticated;
+              _currentUser = null;
+            });
+          }
+        }
+      });
+    }
 
     // Listen for auth expiry from the ApiClient interceptor.
     // When token refresh fails mid-session, force back to login.

@@ -12,8 +12,9 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   dio: ^5.7.0                        # HTTP client with interceptor support (auth, retries)
-  google_sign_in: ^6.2.2             # Google OAuth — retrieves ID token on device
-  flutter_secure_storage: ^9.2.2     # Encrypted local storage for access/refresh tokens
+  google_sign_in: ^6.2.2             # Google OAuth — retrieves ID token on device (native)
+  flutter_secure_storage: ^9.2.2     # Encrypted local storage for access/refresh tokens (native)
+  supabase_flutter: ^2.8.0           # Supabase client — used for OAuth redirect flow on web
 
 dev_dependencies:
   flutter_test:

@@ -1,32 +1,36 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/api_config.dart';
 import '../models/user_profile.dart';
 
-/// Keys used for flutter_secure_storage
+/// Keys used for flutter_secure_storage (native only).
 const _kAccessToken = 'access_token';
 const _kRefreshToken = 'refresh_token';
 
 /// Handles the full auth lifecycle for the Nexus mobile app.
 ///
-/// Auth flow:
-///   1. signInWithGoogle() → Google ID token → Supabase REST → store tokens
-///   2. All subsequent API calls use the stored access_token (via ApiClient interceptor)
-///   3. On 401, ApiClient calls refreshToken() → new tokens stored
-///   4. signOut() → clear storage
+/// Platform split:
+///   Web    → Supabase OAuth redirect flow (signInWithOAuth)
+///   Native → google_sign_in ID token → Supabase REST token exchange
 ///
 /// This service does NOT import ApiClient to avoid a circular dependency.
-/// It uses its own Dio instances for Supabase Auth REST calls.
 class AuthService {
   AuthService._();
   static final AuthService instance = AuthService._();
 
   static const _storage = FlutterSecureStorage();
 
-  final _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  // Native only — Google Sign-In SDK
+  final _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+    clientId:
+        ApiConfig.googleClientId.isNotEmpty ? ApiConfig.googleClientId : null,
+  );
 
-  // Dio pointed at Supabase Auth REST — used for token exchange and refresh only
+  // Native only — Dio pointed at Supabase Auth REST for token exchange/refresh
   final _supabaseDio = Dio(
     BaseOptions(
       baseUrl: '${ApiConfig.supabaseUrl}/auth/v1',
@@ -39,8 +43,7 @@ class AuthService {
     ),
   );
 
-  // Dio pointed at the Next.js API — used for session validation only,
-  // without the auth interceptor (to avoid circular calls)
+  // Dio pointed at the Next.js API — no interceptors to avoid circular calls
   final _apiDio = Dio(
     BaseOptions(
       baseUrl: ApiConfig.baseUrl,
@@ -49,49 +52,44 @@ class AuthService {
     ),
   );
 
+  SupabaseClient get _supabase => Supabase.instance.client;
+
   // ── Public API ────────────────────────────────────────────────────────────
 
-  /// Signs the user in with Google.
+  /// Signs in with Google.
   ///
-  /// 1. Opens the Google account picker on device.
-  /// 2. Exchanges the Google ID token with Supabase Auth REST.
-  /// 3. Stores access_token + refresh_token in secure storage.
-  /// 4. Returns the UserProfile fetched from the Next.js API.
-  Future<UserProfile> signInWithGoogle() async {
-    // Step 1 — get Google ID token
-    final googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) throw Exception('Google sign-in cancelled');
-
-    final googleAuth = await googleUser.authentication;
-    final idToken = googleAuth.idToken;
-    if (idToken == null) throw Exception('Failed to get Google ID token');
-
-    // Step 2 — exchange with Supabase Auth
-    final response = await _supabaseDio.post(
-      '/token?grant_type=id_token',
-      data: {
-        'provider': 'google',
-        'id_token': idToken,
-        if (googleAuth.accessToken != null)
-          'access_token': googleAuth.accessToken,
-      },
-    );
-
-    final accessToken = response.data['access_token'] as String;
-    final refreshToken = response.data['refresh_token'] as String;
-
-    // Step 3 — persist tokens
-    await _storeTokens(accessToken, refreshToken);
-
-    // Step 4 — fetch the user profile from our API
-    return _fetchProfile(accessToken);
+  /// Web: triggers Supabase OAuth redirect — returns null because the browser
+  ///      navigates away. Session is restored by [getStoredSession] on reload.
+  /// Native: opens Google account picker, exchanges ID token with Supabase,
+  ///         stores tokens, returns the user's profile.
+  Future<UserProfile?> signInWithGoogle() async {
+    if (kIsWeb) {
+      await _supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        // Redirect back to the current origin (e.g. http://localhost:PORT).
+        // Must be listed in Supabase Dashboard → Auth → URL Configuration.
+        redirectTo: Uri.base.origin,
+      );
+      return null; // Browser redirects — never reached in practice
+    }
+    return _signInWithGoogleNative();
   }
 
-  /// Checks whether a valid session already exists on device.
+  /// Checks for a valid stored session on app start.
   ///
-  /// Reads the stored access_token and validates it against the API.
-  /// Returns null if no session exists or tokens are invalid and unrefreshable.
+  /// Web: reads from Supabase's localStorage-backed session.
+  /// Native: reads from flutter_secure_storage; tries token refresh on 401.
   Future<UserProfile?> getStoredSession() async {
+    if (kIsWeb) {
+      final session = _supabase.auth.currentSession;
+      if (session == null) return null;
+      try {
+        return await _fetchProfile(session.accessToken);
+      } catch (_) {
+        return null;
+      }
+    }
+
     final accessToken = await _storage.read(key: _kAccessToken);
     if (accessToken == null) return null;
 
@@ -99,7 +97,6 @@ class AuthService {
       return await _fetchProfile(accessToken);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        // Token expired — try refreshing
         final refreshed = await refreshToken();
         if (!refreshed) return null;
         final newToken = await _storage.read(key: _kAccessToken);
@@ -110,23 +107,33 @@ class AuthService {
     }
   }
 
-  /// Refreshes the access token using the stored refresh token.
+  /// Refreshes the access token.
   ///
   /// Called automatically by ApiClient interceptor on 401 responses.
-  /// Returns true if the refresh succeeded and new tokens were stored.
+  /// Returns true if new tokens were stored successfully.
   Future<bool> refreshToken() async {
-    final refreshToken = await _storage.read(key: _kRefreshToken);
-    if (refreshToken == null) return false;
+    if (kIsWeb) {
+      try {
+        final response = await _supabase.auth.refreshSession();
+        return response.session != null;
+      } catch (_) {
+        await clearTokens();
+        return false;
+      }
+    }
+
+    final storedRefresh = await _storage.read(key: _kRefreshToken);
+    if (storedRefresh == null) return false;
 
     try {
       final response = await _supabaseDio.post(
         '/token?grant_type=refresh_token',
-        data: {'refresh_token': refreshToken},
+        data: {'refresh_token': storedRefresh},
       );
-
-      final newAccess = response.data['access_token'] as String;
-      final newRefresh = response.data['refresh_token'] as String;
-      await _storeTokens(newAccess, newRefresh);
+      await _storeTokens(
+        response.data['access_token'] as String,
+        response.data['refresh_token'] as String,
+      );
       return true;
     } catch (_) {
       await clearTokens();
@@ -134,9 +141,15 @@ class AuthService {
     }
   }
 
-  /// Signs the user out — clears secure storage.
-  /// Optionally calls the API signout endpoint to invalidate the server session.
+  /// Signs the user out and clears all session data.
   Future<void> signOut() async {
+    if (kIsWeb) {
+      try {
+        await _supabase.auth.signOut();
+      } catch (_) {}
+      return;
+    }
+
     final accessToken = await _storage.read(key: _kAccessToken);
     if (accessToken != null) {
       try {
@@ -154,16 +167,51 @@ class AuthService {
     await _googleSignIn.signOut();
   }
 
-  /// Reads the stored access token. Used by ApiClient interceptor.
-  Future<String?> getAccessToken() => _storage.read(key: _kAccessToken);
+  /// Returns the current access token. Used by ApiClient interceptor.
+  Future<String?> getAccessToken() async {
+    if (kIsWeb) {
+      return _supabase.auth.currentSession?.accessToken;
+    }
+    return _storage.read(key: _kAccessToken);
+  }
 
-  /// Clears all stored tokens (called on refresh failure or explicit sign-out).
+  /// Clears all stored tokens. Called on refresh failure or explicit sign-out.
   Future<void> clearTokens() async {
+    if (kIsWeb) {
+      try {
+        await _supabase.auth.signOut();
+      } catch (_) {}
+      return;
+    }
     await _storage.delete(key: _kAccessToken);
     await _storage.delete(key: _kRefreshToken);
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  Future<UserProfile> _signInWithGoogleNative() async {
+    final googleUser = await _googleSignIn.signIn();
+    if (googleUser == null) throw Exception('Google sign-in cancelled');
+
+    final googleAuth = await googleUser.authentication;
+    final idToken = googleAuth.idToken;
+    if (idToken == null) throw Exception('Failed to get Google ID token');
+
+    final response = await _supabaseDio.post(
+      '/token?grant_type=id_token',
+      data: {
+        'provider': 'google',
+        'id_token': idToken,
+        if (googleAuth.accessToken != null)
+          'access_token': googleAuth.accessToken,
+      },
+    );
+
+    final accessToken = response.data['access_token'] as String;
+    final refreshToken = response.data['refresh_token'] as String;
+    await _storeTokens(accessToken, refreshToken);
+    return _fetchProfile(accessToken);
+  }
 
   Future<void> _storeTokens(String accessToken, String refreshToken) async {
     await _storage.write(key: _kAccessToken, value: accessToken);

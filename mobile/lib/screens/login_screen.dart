@@ -24,7 +24,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final user = await AuthService.instance.signInWithGoogle();
-      if (mounted) widget.onLoginSuccess(user);
+      // On web, signInWithGoogle() returns null because the browser redirects.
+      // The session is restored by _checkSession() when the page reloads.
+      if (user != null && mounted) widget.onLoginSuccess(user);
     } catch (e) {
       if (mounted) {
         setState(() {
