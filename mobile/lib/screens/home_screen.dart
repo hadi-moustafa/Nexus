@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
+import '../models/article.dart';
+import '../services/articles_service.dart';
+import '../utils/time_utils.dart';
 import 'country_panel.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -20,6 +23,35 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _showCountryPanel = false;
   String _selectedCountry = '';
+
+  List<Article> _trendingArticles = [];
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrending();
+  }
+
+  Future<void> _loadTrending() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final articles = await ArticlesService.instance.fetchTrending(limit: 5);
+      setState(() {
+        _trendingArticles = articles;
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Could not load articles';
+        _isLoading = false;
+      });
+    }
+  }
 
   void _onCountryTap(String country) {
     setState(() {
@@ -174,49 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Trending Articles List
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final articles = [
-                        {
-                          'title': 'Global Markets Rally as Inflation Shows Signs of Cooling',
-                          'source': 'Financial Times',
-                          'time': '2h ago',
-                          'category': 'Economy',
-                          'isBreaking': true,
-                        },
-                        {
-                          'title': 'Historic Climate Agreement Reached at UN Summit',
-                          'source': 'Reuters',
-                          'time': '4h ago',
-                          'category': 'Environment',
-                          'isBreaking': false,
-                        },
-                        {
-                          'title': 'Tech Giants Announce Major AI Safety Partnership',
-                          'source': 'The Verge',
-                          'time': '6h ago',
-                          'category': 'Technology',
-                          'isBreaking': false,
-                        },
-                      ];
-
-                      if (index >= articles.length) return null;
-                      final article = articles[index];
-
-                      return ArticleCard(
-                        title: article['title'] as String,
-                        source: article['source'] as String,
-                        timeAgo: article['time'] as String,
-                        category: article['category'] as String,
-                        isBreaking: article['isBreaking'] as bool,
-                        isDark: widget.isDark,
-                        imageUrl: 'placeholder',
-                      );
-                    },
-                    childCount: 3,
-                  ),
-                ),
+                sliver: _buildTrendingList(),
               ),
 
               // Bottom Padding
@@ -234,6 +224,78 @@ class _HomeScreenState extends State<HomeScreen> {
               onClose: () => setState(() => _showCountryPanel = false),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTrendingList() {
+    if (_isLoading) {
+      return SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (_, __) => _ArticleSkeleton(isDark: widget.isDark),
+          childCount: 3,
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Column(
+              children: [
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: DynamicColors(widget.isDark).textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _loadTrending,
+                  child: const Text(
+                    'Try again',
+                    style: TextStyle(color: NexusColors.teal),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_trendingArticles.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Text(
+              'No articles yet — check back soon.',
+              style: TextStyle(
+                color: DynamicColors(widget.isDark).textSecondary,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final article = _trendingArticles[index];
+          return ArticleCard(
+            title: article.title,
+            source: article.sourceId,
+            timeAgo: timeAgo(article.publishedAt),
+            category: article.category,
+            isDark: widget.isDark,
+            imageUrl: article.imageUrl,
+          );
+        },
+        childCount: _trendingArticles.length,
       ),
     );
   }
@@ -446,13 +508,56 @@ class _MapHotspot extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isDark 
-                    ? NexusColors.darkTextPrimary 
+                color: isDark
+                    ? NexusColors.darkTextPrimary
                     : NexusColors.lightTextPrimary,
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Skeleton placeholder shown while trending articles are loading.
+class _ArticleSkeleton extends StatelessWidget {
+  final bool isDark;
+  const _ArticleSkeleton({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = DynamicColors(isDark);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _shimmer(colors, height: 14, width: 80),
+          const SizedBox(height: 12),
+          _shimmer(colors, height: 18, width: double.infinity),
+          const SizedBox(height: 6),
+          _shimmer(colors, height: 18, width: 200),
+          const SizedBox(height: 12),
+          _shimmer(colors, height: 12, width: 120),
+        ],
+      ),
+    );
+  }
+
+  Widget _shimmer(DynamicColors colors, {required double height, required double width}) {
+    return Container(
+      height: height,
+      width: width,
+      decoration: BoxDecoration(
+        color: colors.muted,
+        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../models/user_profile.dart';
 
 class ProfileScreen extends StatelessWidget {
   final bool isDark;
+  final UserProfile? currentUser;
+  final VoidCallback? onSignOut;
 
-  const ProfileScreen({super.key, required this.isDark});
+  const ProfileScreen({
+    super.key,
+    required this.isDark,
+    this.currentUser,
+    this.onSignOut,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +37,12 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             actions: [
+              if (onSignOut != null)
+                IconButton(
+                  icon: Icon(Icons.logout_outlined, color: colors.textPrimary),
+                  tooltip: 'Sign out',
+                  onPressed: onSignOut,
+                ),
               IconButton(
                 icon: Icon(Icons.settings_outlined, color: colors.textPrimary),
                 onPressed: () {},
@@ -54,21 +68,30 @@ class ProfileScreen extends StatelessWidget {
                         width: 3,
                       ),
                     ),
-                    child: const Center(
-                      child: Text(
-                        'JD',
-                        style: TextStyle(
-                          fontFamily: 'Fraunces',
-                          fontSize: 36,
-                          fontWeight: FontWeight.w600,
-                          color: NexusColors.teal,
-                        ),
-                      ),
-                    ),
+                    child: currentUser?.avatarUrl != null
+                        ? ClipOval(
+                            child: Image.network(
+                              currentUser!.avatarUrl!,
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              currentUser?.initials ?? '?',
+                              style: const TextStyle(
+                                fontFamily: 'Fraunces',
+                                fontSize: 36,
+                                fontWeight: FontWeight.w600,
+                                color: NexusColors.teal,
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'John Doe',
+                    currentUser?.name ?? 'Guest',
                     style: TextStyle(
                       fontFamily: 'Fraunces',
                       fontSize: 24,
@@ -78,7 +101,7 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '@johndoe',
+                    currentUser?.email ?? '',
                     style: TextStyle(
                       fontSize: 16,
                       color: colors.textSecondary,

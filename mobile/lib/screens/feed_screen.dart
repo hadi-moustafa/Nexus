@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
 import '../widgets/category_chip.dart';
+import '../models/article.dart';
+import '../services/articles_service.dart';
+import '../utils/time_utils.dart';
 
 class FeedScreen extends StatefulWidget {
   final bool isDark;
@@ -24,6 +27,45 @@ class _FeedScreenState extends State<FeedScreen> {
     'Health',
     'Sports',
   ];
+
+  List<Article> _articles = [];
+  bool _isLoading = false;
+  String? _error;
+
+  // Maps UI category labels to API category param values.
+  // 'For You' → no filter (null). Others are lowercased.
+  String? get _apiCategory {
+    if (_selectedCategory == 'For You') return null;
+    return _selectedCategory.toLowerCase();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadArticles();
+  }
+
+  Future<void> _loadArticles() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final result = await ArticlesService.instance.fetchArticles(
+        limit: 20,
+        category: _apiCategory,
+      );
+      setState(() {
+        _articles = result.articles;
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _error = 'Could not load articles';
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +111,7 @@ class _FeedScreenState extends State<FeedScreen> {
                 isDark: widget.isDark,
                 onCategorySelected: (category) {
                   setState(() => _selectedCategory = category);
+                  _loadArticles();
                 },
               ),
             ),
@@ -130,57 +173,7 @@ class _FeedScreenState extends State<FeedScreen> {
           // Articles List
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final articles = [
-                    {
-                      'title': 'Artificial Intelligence Reshapes Healthcare Diagnostics',
-                      'source': 'MIT Technology Review',
-                      'time': '15m ago',
-                      'category': 'Technology',
-                    },
-                    {
-                      'title': 'Sustainable Energy Investments Hit Record High in Q3',
-                      'source': 'Bloomberg',
-                      'time': '1h ago',
-                      'category': 'Business',
-                    },
-                    {
-                      'title': 'New Archaeological Discovery Rewrites Ancient History',
-                      'source': 'National Geographic',
-                      'time': '2h ago',
-                      'category': 'Science',
-                    },
-                    {
-                      'title': 'Global Education Summit Addresses Digital Divide',
-                      'source': 'The Guardian',
-                      'time': '3h ago',
-                      'category': 'World',
-                    },
-                    {
-                      'title': 'Mental Health Apps See Surge in Adoption',
-                      'source': 'Health Today',
-                      'time': '4h ago',
-                      'category': 'Health',
-                    },
-                  ];
-
-                  if (index >= articles.length) return null;
-                  final article = articles[index];
-
-                  return ArticleCard(
-                    title: article['title'] as String,
-                    source: article['source'] as String,
-                    timeAgo: article['time'] as String,
-                    category: article['category'] as String,
-                    isDark: widget.isDark,
-                    imageUrl: 'placeholder',
-                  );
-                },
-                childCount: 5,
-              ),
-            ),
+            sliver: _buildArticleList(colors),
           ),
 
           // Bottom Padding
@@ -188,6 +181,71 @@ class _FeedScreenState extends State<FeedScreen> {
             child: SizedBox(height: 100),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildArticleList(DynamicColors colors) {
+    if (_isLoading) {
+      return SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (_, __) => _FeedSkeleton(colors: colors),
+          childCount: 5,
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Center(
+            child: Column(
+              children: [
+                Text(_error!, style: TextStyle(color: colors.textSecondary)),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _loadArticles,
+                  child: const Text(
+                    'Try again',
+                    style: TextStyle(color: NexusColors.teal),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_articles.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Center(
+            child: Text(
+              'No articles in this category yet.',
+              style: TextStyle(color: colors.textSecondary),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final article = _articles[index];
+          return ArticleCard(
+            title: article.title,
+            source: article.sourceId,
+            timeAgo: timeAgo(article.publishedAt),
+            category: article.category,
+            isDark: widget.isDark,
+            imageUrl: article.imageUrl,
+          );
+        },
+        childCount: _articles.length,
       ),
     );
   }
@@ -306,4 +364,44 @@ class _SpotlightSection extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Skeleton placeholder shown while feed articles are loading.
+class _FeedSkeleton extends StatelessWidget {
+  final DynamicColors colors;
+  const _FeedSkeleton({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _bar(80, 12),
+          const SizedBox(height: 10),
+          _bar(double.infinity, 18),
+          const SizedBox(height: 6),
+          _bar(220, 18),
+          const SizedBox(height: 12),
+          _bar(140, 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _bar(double width, double height) => Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: colors.muted,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      );
 }
