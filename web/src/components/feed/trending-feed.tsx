@@ -6,7 +6,7 @@ export async function TrendingFeed() {
   try {
     ({ articles } = await getTrendingArticles({ limit: 10 }));
   } catch (err) {
-    console.error("[TrendingFeed] Error fetching articles:", err);
+    console.error("[TrendingFeed] Error fetching articles:", (err as Error)?.message ?? err);
     return (
       <div className="p-5 text-center text-[var(--text-secondary)] border border-[var(--border)] rounded-2xl bg-[var(--surface)]">
         <p className="text-sm">Could not load articles. Please try again later.</p>
@@ -23,18 +23,9 @@ export async function TrendingFeed() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       {articles.map((article) => (
-        <ArticleCard
-          key={article.id}
-          title={article.title}
-          source={article.sourceId || "News"}
-          time={new Date(article.publishedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          })}
-          category={article.category}
-        />
+        <ArticleCard key={article.id} article={article} />
       ))}
     </div>
   );

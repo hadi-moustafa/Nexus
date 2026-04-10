@@ -12,6 +12,7 @@
 
   --font-display: var(--font-fraunces);
   --font-sans: var(--font-dm-sans);
+  --font-arabic: var(--font-arabic);
 }
 
 :root {
@@ -37,4 +38,10 @@
 body {
   background-color: var(--background);
   color: var(--text-primary);
+}
+
+/* Arabic RTL support */
+[dir="rtl"] {
+  font-family: var(--font-arabic), sans-serif;
+  text-align: right;
 }

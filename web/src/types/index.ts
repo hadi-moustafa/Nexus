@@ -12,9 +12,24 @@ export interface Article {
   imageUrl: string | null;
   publishedAt: string; // ISO 8601
   sourceId: string;
+  sourceName: string;
   category: string;
   language: string;
-  region: string | null;
+  countryCode: string | null;
+  aiSummary: string | null;
+  viewCount: number;
+  journalistId: string | null;
+  journalistName: string | null;
+}
+
+export interface Journalist {
+  id: string;
+  name: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  bylineMatch: string | null;
+  isVerified: boolean;
+  followerCount: number;
 }
 
 export interface UserProfile {
@@ -23,6 +38,18 @@ export interface UserProfile {
   displayName: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  /** "google" | "email" — determines whether password change is available */
+  provider?: string;
+}
+
+export interface Subscription {
+  id: string;
+  plan: "monthly" | "annual";
+  status: "active" | "canceled" | "trialing" | "past_due";
+  startDate: string;
+  endDate: string | null;
+  autoRenew: boolean;
+  trialEndsAt: string | null;
 }
 
 export interface UserPreferences {
@@ -57,6 +84,13 @@ export interface Region {
   slug: string;
   label: string;
   articleCount: number;
+}
+
+export interface Bookmark {
+  id: string;
+  articleId: string;
+  createdAt: string;
+  article: Article;
 }
 
 // API response wrappers

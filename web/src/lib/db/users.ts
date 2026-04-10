@@ -116,7 +116,7 @@ export async function getUserStats(userId: string): Promise<UserStats | null> {
 
   const { data, error } = await supabase
     .from("user_stats")
-    .select("total_xp, current_streak, longest_streak, quizzes_completed, perfect_scores")
+    .select("total_xp, current_streak, longest_streak, quizzes_completed, perfect_scores, articles_read")
     .eq("user_id", userId)
     .single();
 

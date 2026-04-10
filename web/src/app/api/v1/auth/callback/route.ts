@@ -23,13 +23,26 @@ export async function GET(request: NextRequest) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     console.error("[auth/callback] exchangeCodeForSession failed:", error.message);
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
 
-  // Redirect to the originally intended destination, or home
-  return NextResponse.redirect(`${origin}${next}`);
+  // For new users (first sign-in), redirect to onboarding
+  if (sessionData?.user) {
+    const { data: prefs } = await supabase
+      .from("user_preferences")
+      .select("onboarding_complete")
+      .eq("user_id", sessionData.user.id)
+      .single();
+
+    if (!prefs || !prefs.onboarding_complete) {
+      return NextResponse.redirect(`${origin}/onboarding`);
+    }
+  }
+
+  // Redirect to the originally intended destination, or feed
+  return NextResponse.redirect(`${origin}${next === "/" ? "/feed" : next}`);
 }

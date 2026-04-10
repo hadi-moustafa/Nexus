@@ -80,12 +80,12 @@ export async function fetchAndIngestAll(): Promise<IngestResult> {
 
     const rows = articles.map((a) => ({
       title: a.title,
-      summary: a.description ?? null,
+      description: a.description ?? null,
       content: a.content ?? null,
       url: a.url,
-      image_url: a.image ?? null,
+      thumbnail_url: a.image ?? null,
       published_at: a.publishedAt,
-      source_id: a.source?.name ?? "Unknown",
+      source_name: a.source?.name ?? "Unknown",
       category,
       language: a.lang ?? "en",
     }));

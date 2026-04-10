@@ -1,33 +1,39 @@
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createPublicClient } from "@/lib/supabase/server";
 import type { Article } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Row mapping
-// Maps a raw Supabase DB row (snake_case) to the canonical Article type
-// (camelCase). This is the single place where column names are translated —
-// never in components or route handlers.
+// Actual DB columns (from Supabase schema):
+//   id, title, url, source_id (uuid FK), source_name (text), journalist_id,
+//   country_code, category, language, ai_summary, description, content,
+//   thumbnail_url, published_at, view_count, cached_at, cache_expires_at
 // ---------------------------------------------------------------------------
 function rowToArticle(row: Record<string, unknown>): Article {
   return {
     id: row.id as string,
     title: row.title as string,
-    summary: (row.summary as string | null) ?? null,
+    summary: (row.description as string | null) ?? null,
     content: (row.content as string | null) ?? null,
     url: row.url as string,
-    imageUrl: (row.image_url as string | null) ?? null,
+    imageUrl: (row.thumbnail_url as string | null) ?? null,
     publishedAt: row.published_at as string,
     sourceId: (row.source_id as string) ?? "",
-    category: (row.category as string) ?? "General",
+    sourceName: (row.source_name as string) ?? "Unknown",
+    category: (row.category as string) ?? "general",
     language: (row.language as string) ?? "en",
-    region: (row.region as string | null) ?? null,
+    countryCode: (row.country_code as string | null) ?? null,
+    aiSummary: (row.ai_summary as string | null) ?? null,
+    viewCount: (row.view_count as number) ?? 0,
+    journalistId: (row.journalist_id as string | null) ?? null,
+    // journalistName is only populated by getArticleById (separate lookup).
+    // List queries omit the join to avoid a schema mismatch error.
+    journalistName: null,
   };
 }
 
 // ---------------------------------------------------------------------------
-// Cursor helpers
-// Cursor = base64url-encoded published_at timestamp.
-// Simple and collision-tolerant enough for a news feed.
+// Cursor helpers — base64url-encoded published_at timestamp
 // ---------------------------------------------------------------------------
 function encodeCursor(publishedAt: string): string {
   return Buffer.from(publishedAt).toString("base64url");
@@ -43,7 +49,7 @@ function decodeCursor(cursor: string): string | null {
 
 // ---------------------------------------------------------------------------
 // getTrendingArticles
-// Used by the web TrendingFeed server component (direct DB call, no HTTP hop).
+// Used by the TrendingFeed server component (direct DB call, no HTTP hop).
 // ---------------------------------------------------------------------------
 export async function getTrendingArticles(opts: {
   limit?: number;
@@ -51,14 +57,16 @@ export async function getTrendingArticles(opts: {
 } = {}): Promise<{ articles: Article[]; nextCursor: string | null }> {
   const { limit = 10, cursor } = opts;
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  // Use cookie-free client — this is a public read with no auth required.
+  // Avoids Supabase auth-token lock contention when multiple server components
+  // render concurrently on the same request.
+  const supabase = createPublicClient();
 
   let query = supabase
     .from("articles")
     .select("*")
     .order("published_at", { ascending: false })
-    .limit(limit + 1); // +1 to detect if there is a next page
+    .limit(limit + 1);
 
   if (cursor) {
     const publishedAt = decodeCursor(cursor);
@@ -80,15 +88,23 @@ export async function getTrendingArticles(opts: {
 
 // ---------------------------------------------------------------------------
 // getArticles
-// Paginated article list with optional category filter.
-// Used by /api/v1/articles route handler.
+// Paginated list with optional filters.
+// Used by /api/v1/articles and /api/v1/feed.
 // ---------------------------------------------------------------------------
+// Keywords used for the Lebanon filter — matches both English and Arabic titles/descriptions
+const LEBANON_FILTER =
+  "title.ilike.%Lebanon%,title.ilike.%لبنان%," +
+  "description.ilike.%Lebanon%,description.ilike.%لبنان%";
+
 export async function getArticles(opts: {
   limit?: number;
   cursor?: string;
   category?: string;
+  countryCode?: string;
+  language?: string;
+  topics?: string[];
 } = {}): Promise<{ articles: Article[]; nextCursor: string | null }> {
-  const { limit = 20, cursor, category } = opts;
+  const { limit = 20, cursor, category, countryCode, language, topics } = opts;
 
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
@@ -99,9 +115,17 @@ export async function getArticles(opts: {
     .order("published_at", { ascending: false })
     .limit(limit + 1);
 
-  if (category) {
+  // "lebanon" is a virtual category — filter by keyword across all real categories
+  if (category === "lebanon") {
+    query = query.or(LEBANON_FILTER);
+  } else if (category) {
     query = query.eq("category", category);
   }
+
+  if (countryCode) query = query.eq("country_code", countryCode);
+  // Language filter: only apply when explicitly requested (not from user prefs)
+  if (language) query = query.eq("language", language);
+  if (topics && topics.length > 0) query = query.in("category", topics);
 
   if (cursor) {
     const publishedAt = decodeCursor(cursor);
@@ -123,8 +147,8 @@ export async function getArticles(opts: {
 
 // ---------------------------------------------------------------------------
 // getArticleById
-// Used by /api/v1/articles/[id] route handler.
-// Returns null when the article does not exist.
+// Used by /api/v1/articles/[id] and the article reader page.
+// Fetches the article then does a separate lookup for journalist name.
 // ---------------------------------------------------------------------------
 export async function getArticleById(id: string): Promise<Article | null> {
   const cookieStore = await cookies();
@@ -137,9 +161,69 @@ export async function getArticleById(id: string): Promise<Article | null> {
     .single();
 
   if (error) {
-    if (error.code === "PGRST116") return null; // row not found
+    if (error.code === "PGRST116") return null;
     throw error;
   }
+  if (!data) return null;
 
-  return data ? rowToArticle(data as Record<string, unknown>) : null;
+  const article = rowToArticle(data as Record<string, unknown>);
+
+  // Fetch journalist name separately if the article has a journalist_id
+  if (article.journalistId) {
+    const { data: journalist } = await supabase
+      .from("journalists")
+      .select("name")
+      .eq("id", article.journalistId)
+      .single();
+
+    if (journalist) {
+      article.journalistName = journalist.name as string;
+    }
+  }
+
+  return article;
+}
+
+// ---------------------------------------------------------------------------
+// searchArticles
+// ilike on title + description. Used by /api/v1/search.
+// ---------------------------------------------------------------------------
+export async function searchArticles(opts: {
+  query: string;
+  limit?: number;
+  cursor?: string;
+  category?: string;
+  language?: string;
+}): Promise<{ articles: Article[]; nextCursor: string | null }> {
+  const { query, limit = 20, cursor, category, language } = opts;
+
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  let q = supabase
+    .from("articles")
+    .select("*")
+    .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+    .order("published_at", { ascending: false })
+    .limit(limit + 1);
+
+  if (category) q = q.eq("category", category);
+  if (language) q = q.eq("language", language);
+
+  if (cursor) {
+    const publishedAt = decodeCursor(cursor);
+    if (publishedAt) q = q.lt("published_at", publishedAt);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const hasMore = rows.length > limit;
+  const articles = rows.slice(0, limit).map(rowToArticle);
+
+  return {
+    articles,
+    nextCursor: hasMore ? encodeCursor(articles[articles.length - 1].publishedAt) : null,
+  };
 }
