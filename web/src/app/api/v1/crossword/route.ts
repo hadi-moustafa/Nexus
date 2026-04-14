@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 
 // XP rewards
@@ -22,8 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     const { timeSeconds } = await request.json();
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -116,8 +114,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(_request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

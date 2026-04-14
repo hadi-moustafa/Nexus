@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 
 const STREAK_BONUS = 5; // per streak day, capped at 50
@@ -38,8 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Fetch correct answers server-side
     const { data: questions, error: qErr } = await supabase

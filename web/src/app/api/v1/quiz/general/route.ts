@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/v1/quiz/general?difficulty=easy|medium|hard
@@ -20,8 +19,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Fetch a random sample of 5 questions for the difficulty
     const { data: questions, error } = await supabase

@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 
 /**
@@ -18,8 +17,8 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    // Use service client throughout — no cookie lock contention
+    const supabase = createServiceClient();
 
     // Verify premium subscription
     const { data: sub } = await supabase
@@ -61,28 +60,47 @@ export async function GET(request: NextRequest) {
     }
 
     // No digest yet — generate on demand
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Try last 24h first, fall back to last 7 days, then just the most recent articles
     const lang = language === "ar" || language === "fr" ? language : "en";
 
-    const { data: articles } = await supabase
-      .from("articles")
-      .select("id, title, description, url, category, language")
-      .gte("published_at", since)
-      .eq("language", lang)
-      .order("view_count", { ascending: false })
-      .limit(10);
+    async function fetchArticles(since: string, language: string) {
+      return (await supabase
+        .from("articles")
+        .select("id, title, description, url, category, language")
+        .gte("published_at", since)
+        .eq("language", language)
+        .order("published_at", { ascending: false })
+        .limit(10)
+      ).data ?? [];
+    }
 
-    // Also try English if language-specific articles are sparse
-    const effectiveArticles = articles && articles.length >= 3
-      ? articles
-      : (await supabase
-          .from("articles")
-          .select("id, title, description, url, category, language")
-          .gte("published_at", since)
-          .eq("language", "en")
-          .order("view_count", { ascending: false })
-          .limit(10)
-        ).data ?? [];
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const since7d  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    let effectiveArticles = await fetchArticles(since24h, lang);
+
+    // Widen to 7 days if sparse
+    if (effectiveArticles.length < 3) {
+      effectiveArticles = await fetchArticles(since7d, lang);
+    }
+
+    // Fall back to English if still sparse
+    if (effectiveArticles.length < 3 && lang !== "en") {
+      effectiveArticles = await fetchArticles(since24h, "en");
+      if (effectiveArticles.length < 3) {
+        effectiveArticles = await fetchArticles(since7d, "en");
+      }
+    }
+
+    // Last resort: newest 10 articles regardless of language or date
+    if (effectiveArticles.length === 0) {
+      effectiveArticles = (await supabase
+        .from("articles")
+        .select("id, title, description, url, category, language")
+        .order("published_at", { ascending: false })
+        .limit(10)
+      ).data ?? [];
+    }
 
     if (!effectiveArticles || effectiveArticles.length === 0) {
       return NextResponse.json(
@@ -121,19 +139,23 @@ export async function GET(request: NextRequest) {
     }
 
     // Persist so subsequent requests are fast
+    // Upsert handles race conditions (two users hitting digest at the same time)
     const { data: inserted } = await supabase
       .from("digests")
-      .insert({
-        cohort_key: lang,
-        digest_date: today,
-        introduction: generatedDigest.introduction,
-        stories: generatedDigest.stories,
-        article_count: generatedDigest.stories.length,
-      })
+      .upsert(
+        {
+          cohort_key: lang,
+          digest_date: today,
+          introduction: generatedDigest.introduction,
+          stories: generatedDigest.stories,
+          article_count: generatedDigest.stories.length,
+        },
+        { onConflict: "cohort_key,digest_date" }
+      )
       .select("id, cohort_key, digest_date, introduction, stories, article_count, generated_at")
       .single();
 
-    return NextResponse.json({ data: inserted ?? generatedDigest });
+    return NextResponse.json({ data: inserted ?? { ...generatedDigest, digest_date: today, cohort_key: lang, article_count: generatedDigest.stories.length, generated_at: new Date().toISOString() } });
   } catch (err) {
     console.error("[GET /api/v1/digest]", err);
     return NextResponse.json(

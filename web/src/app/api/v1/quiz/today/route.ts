@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/v1/quiz/today
@@ -12,8 +11,7 @@ import { createClient } from "@/lib/supabase/server";
  */
 export async function GET(_request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 

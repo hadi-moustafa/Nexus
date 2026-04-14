@@ -252,27 +252,46 @@ export default function ProfilePage() {
 
         {/* Avatar + name */}
         <div className={`flex items-center gap-4 mb-6 ${loadingProfile ? "animate-pulse" : ""}`}>
-          <div className="w-16 h-16 rounded-2xl bg-[var(--primary)] flex items-center justify-center shrink-0 overflow-hidden">
-            {profile?.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-2xl font-bold text-white">{avatarLetter}</span>
+          {/* Avatar with PRO ring */}
+          <div className={`relative shrink-0 ${subscription?.status === "active" || subscription?.status === "trialing" ? "p-0.5 rounded-[18px] bg-gradient-to-br from-[var(--primary)] to-purple-500" : ""}`}>
+            <div className="w-16 h-16 rounded-2xl bg-[var(--primary)] flex items-center justify-center overflow-hidden">
+              {profile?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl font-bold text-white">{avatarLetter}</span>
+              )}
+            </div>
+            {(subscription?.status === "active" || subscription?.status === "trialing") && (
+              <span className="absolute -bottom-1.5 -right-1.5 flex items-center gap-0.5 bg-[var(--primary)] text-white text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shadow-sm">
+                <Zap size={8} />PRO
+              </span>
             )}
           </div>
+
           <div className="flex-1 min-w-0">
-            <h1 className="font-display text-xl font-semibold text-[var(--text-primary)] truncate">
-              {loadingProfile
-                ? <span className="inline-block h-5 w-36 rounded bg-[var(--muted)]" />
-                : (profile?.displayName ?? profile?.email ?? "—")}
-            </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-display text-xl font-semibold text-[var(--text-primary)] truncate">
+                {loadingProfile
+                  ? <span className="inline-block h-5 w-36 rounded bg-[var(--muted)]" />
+                  : (profile?.displayName ?? profile?.email ?? "—")}
+              </h1>
+              {(subscription?.status === "active" || subscription?.status === "trialing") && (
+                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-[var(--primary)] to-purple-500 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full">
+                  <Zap size={9} /> Pro
+                </span>
+              )}
+            </div>
             {profile?.displayName && (
               <p className="text-sm text-[var(--text-secondary)] truncate">{profile.email}</p>
             )}
-            {subscription?.status === "active" && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[var(--primary)] mt-0.5">
-                <Zap size={10} /> Premium
-              </span>
+            {!loadingProfile && !subscription && (
+              <button
+                onClick={() => router.push("/premium")}
+                className="text-[10px] font-medium text-[var(--primary)] hover:underline mt-0.5"
+              >
+                Upgrade to Pro →
+              </button>
             )}
           </div>
         </div>

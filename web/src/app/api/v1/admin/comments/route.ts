@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAdminApi } from "@/lib/admin";
 
 /**
@@ -22,8 +21,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Number(searchParams.get("limit") ?? "50"), 100);
     const cursor = searchParams.get("cursor") ?? undefined;
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     let query = supabase
       .from("comments")

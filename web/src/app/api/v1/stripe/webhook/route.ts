@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import type Stripe from "stripe";
 
@@ -32,15 +31,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  // Webhook comes from Stripe — no user session cookies. Must use service role.
+  const supabase = createServiceClient();
 
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.nexus_user_id;
-        const plan = session.metadata?.plan ?? "monthly";
         if (!userId) break;
 
         const subId = session.subscription as string | null;
@@ -63,7 +61,7 @@ export async function POST(request: NextRequest) {
         await supabase.from("subscriptions").upsert(
           {
             user_id: userId,
-            plan,
+            plan: "premium",
             status: "active",
             stripe_customer_id: stripeCustomerId,
             stripe_subscription_id: stripeSubscriptionId,

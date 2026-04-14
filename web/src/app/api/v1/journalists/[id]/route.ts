@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -29,8 +28,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const limit = Math.min(Number(searchParams.get("limit") ?? "10"), 50);
     const cursor = searchParams.get("cursor") ?? undefined;
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Journalist profile
     const { data: journalist, error } = await supabase

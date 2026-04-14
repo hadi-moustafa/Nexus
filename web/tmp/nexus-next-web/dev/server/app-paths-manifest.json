@@ -1,0 +1,9 @@
+{
+  "/api/v1/auth/session/route": "app/api/v1/auth/session/route.js",
+  "/api/v1/digest/route": "app/api/v1/digest/route.js",
+  "/api/v1/user/stats/route": "app/api/v1/user/stats/route.js",
+  "/api/v1/user/subscription/route": "app/api/v1/user/subscription/route.js",
+  "/digest/page": "app/digest/page.js",
+  "/page": "app/page.js",
+  "/profile/page": "app/profile/page.js"
+}

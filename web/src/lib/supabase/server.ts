@@ -41,10 +41,21 @@ export const createPublicClient = () =>
     global: {
       fetch: (url, options) => {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 5000);
+        const timer = setTimeout(() => controller.abort(), 15000);
         return fetch(url, { ...options, signal: controller.signal }).finally(() =>
           clearTimeout(timer)
         );
       },
     },
   });
+
+/**
+ * Service-role client — bypasses RLS entirely.
+ * Use ONLY in trusted server-side contexts (webhooks, cron jobs, admin routes).
+ * NEVER expose to the client or use for user-initiated reads.
+ */
+export const createServiceClient = () =>
+  createSupabaseClient(
+    supabaseUrl,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );

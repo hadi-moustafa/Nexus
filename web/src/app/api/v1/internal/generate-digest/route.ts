@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { generateDigest } from "@/lib/gemini";
 
 /**
@@ -27,8 +26,7 @@ export async function POST(request: NextRequest) {
 
     const today = new Date().toISOString().slice(0, 10);
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Check if digest already generated today for this cohort
     const { data: existing } = await supabase

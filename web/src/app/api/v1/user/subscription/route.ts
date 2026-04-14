@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 
@@ -13,8 +12,7 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const { data, error } = await supabase
       .from("subscriptions")
@@ -49,8 +47,7 @@ export async function DELETE(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Fetch our subscription row for the Stripe customer ID
     const { data: sub, error: fetchErr } = await supabase

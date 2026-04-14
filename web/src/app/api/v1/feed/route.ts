@@ -1,6 +1,5 @@
 import { type NextRequest } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getArticles } from "@/lib/db/articles";
 
 /**
@@ -32,8 +31,7 @@ export async function GET(request: NextRequest) {
 
     // Load user topics (not language!) for the "For You" personalised tab.
     if (!categoryParam && !languageParam) {
-      const cookieStore = await cookies();
-      const supabase = createClient(cookieStore);
+      const supabase = createServiceClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {

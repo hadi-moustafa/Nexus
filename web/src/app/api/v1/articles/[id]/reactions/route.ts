@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 
 interface RouteContext {
@@ -17,8 +16,7 @@ type ReactionType = (typeof VALID_TYPES)[number];
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { id: articleId } = await params;
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     // Aggregate counts
     const { data: rows, error } = await supabase
@@ -78,8 +76,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const { error } = await supabase
       .from("reactions")
@@ -110,8 +107,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
 
   try {
     const { id: articleId } = await params;
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const { error } = await supabase
       .from("reactions")

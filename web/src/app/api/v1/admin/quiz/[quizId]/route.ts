@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { requireAdminApi } from "@/lib/admin";
 
 interface RouteContext {
@@ -27,8 +26,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (typeof body.xp_reward === "number") patch.xp_reward = body.xp_reward;
     if (typeof body.scheduled_for === "string") patch.scheduled_for = body.scheduled_for;
 
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createServiceClient();
 
     const { data, error } = await supabase
       .from("quizzes")
