@@ -1,20 +1,23 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { type NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/auth";
 
 /**
- * Server-component guard. Redirects to / if the caller is not an admin.
- * Use at the top of admin page components.
+ * Server-component guard. Redirects to /login if the caller is not an admin.
+ * Use at the top of admin page server components.
  */
 export async function requireAdminPage(): Promise<string> {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/");
+  if (!user) redirect("/login");
 
-  const { data } = await supabase
+  // Service client bypasses RLS — safe because we already verified identity above.
+  const service = createServiceClient();
+  const { data } = await service
     .from("users")
     .select("role")
     .eq("id", user.id)
@@ -26,36 +29,19 @@ export async function requireAdminPage(): Promise<string> {
 
 /**
  * Route-handler guard. Returns a 403 NextResponse if the caller is not an admin.
- * Use at the top of admin API route handlers.
+ * Works for both web (cookie session) and mobile (Bearer token).
  */
 export async function requireAdminApi(
   request: NextRequest
 ): Promise<{ userId: string } | NextResponse> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const auth = await requireAuth(request);
+  if (auth instanceof NextResponse) return auth; // 401
 
-  // Support Bearer token (mobile) as well as cookies (web)
-  const authHeader = request.headers.get("authorization");
-  let user = null;
-  if (authHeader?.startsWith("Bearer ")) {
-    const { data } = await supabase.auth.getUser(authHeader.slice(7));
-    user = data.user;
-  } else {
-    const { data } = await supabase.auth.getUser();
-    user = data.user;
-  }
-
-  if (!user) {
-    return NextResponse.json(
-      { error: { code: "UNAUTHORIZED", message: "Not authenticated" } },
-      { status: 401 }
-    );
-  }
-
-  const { data } = await supabase
+  const service = createServiceClient();
+  const { data } = await service
     .from("users")
     .select("role")
-    .eq("id", user.id)
+    .eq("id", auth.userId)
     .single();
 
   if (data?.role !== "admin") {
@@ -65,5 +51,5 @@ export async function requireAdminApi(
     );
   }
 
-  return { userId: user.id };
+  return { userId: auth.userId };
 }

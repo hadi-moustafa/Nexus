@@ -115,7 +115,7 @@ export default function ProfilePage() {
           setProfile(user as UserProfile);
           setDisplayName(user.displayName ?? "");
         } else if (sessionRes.value?.error?.code === "UNAUTHORIZED") {
-          router.replace("/");
+          router.replace("/login");
           return;
         }
       }

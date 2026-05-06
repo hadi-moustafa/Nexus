@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import '../models/user_profile.dart';
+import '../models/user_stats.dart';
+import '../services/user_service.dart';
+import '../services/stripe_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/time_utils.dart';
+import 'article_screen.dart';
+import 'premium_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final bool isDark;
   final UserProfile? currentUser;
   final VoidCallback? onSignOut;
@@ -15,312 +21,335 @@ class ProfileScreen extends StatelessWidget {
   });
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  UserStats? _stats;
+  List<BookmarkedArticle> _bookmarks = [];
+  SubscriptionStatus? _subscription;
+  bool _loadingStats = true;
+  bool _loadingBookmarks = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    _loadStats();
+    _loadBookmarks();
+    _loadSubscription();
+  }
+
+  Future<void> _loadSubscription() async {
+    try {
+      final sub = await StripeService.instance.fetchSubscription();
+      if (mounted) setState(() => _subscription = sub);
+    } catch (_) {}
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final stats = await UserService.instance.fetchStats();
+      if (mounted) setState(() { _stats = stats; _loadingStats = false; });
+    } catch (_) {
+      if (mounted) setState(() { _stats = UserStats.empty; _loadingStats = false; });
+    }
+  }
+
+  Future<void> _loadBookmarks() async {
+    try {
+      final result = await UserService.instance.fetchBookmarks(limit: 5);
+      if (mounted) setState(() { _bookmarks = result.bookmarks; _loadingBookmarks = false; });
+    } catch (_) {
+      if (mounted) setState(() { _loadingBookmarks = false; });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final colors = DynamicColors(isDark);
+    final colors = DynamicColors(widget.isDark);
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar
-          SliverAppBar(
-            floating: true,
-            backgroundColor: colors.background,
-            elevation: 0,
-            title: Text(
-              'Profile',
-              style: TextStyle(
-                fontFamily: 'Fraunces',
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: colors.textPrimary,
+      body: RefreshIndicator(
+        color: NexusColors.teal,
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          slivers: [
+            // App Bar
+            SliverAppBar(
+              floating: true,
+              backgroundColor: colors.background,
+              elevation: 0,
+              title: Text(
+                'Profile',
+                style: TextStyle(
+                  fontFamily: 'Fraunces',
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
               ),
-            ),
-            actions: [
-              if (onSignOut != null)
+              actions: [
+                if (widget.onSignOut != null)
+                  IconButton(
+                    icon: Icon(Icons.logout_outlined, color: colors.textPrimary),
+                    tooltip: 'Sign out',
+                    onPressed: widget.onSignOut,
+                  ),
                 IconButton(
-                  icon: Icon(Icons.logout_outlined, color: colors.textPrimary),
-                  tooltip: 'Sign out',
-                  onPressed: onSignOut,
+                  icon: Icon(Icons.workspace_premium_outlined,
+                      color: _subscription?.isPremium == true
+                          ? NexusColors.amber
+                          : colors.textPrimary),
+                  tooltip: 'Premium',
+                  onPressed: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => PremiumScreen(isDark: widget.isDark),
+                    ));
+                    _loadSubscription();
+                  },
                 ),
-              IconButton(
-                icon: Icon(Icons.settings_outlined, color: colors.textPrimary),
-                onPressed: () {},
-              ),
-            ],
-          ),
-
-          // Profile Header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  // Avatar
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: NexusColors.teal.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: NexusColors.teal,
-                        width: 3,
-                      ),
-                    ),
-                    child: currentUser?.avatarUrl != null
-                        ? ClipOval(
-                            child: Image.network(
-                              currentUser!.avatarUrl!,
-                              width: 100,
-                              height: 100,
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        : Center(
-                            child: Text(
-                              currentUser?.initials ?? '?',
-                              style: const TextStyle(
-                                fontFamily: 'Fraunces',
-                                fontSize: 36,
-                                fontWeight: FontWeight.w600,
-                                color: NexusColors.teal,
-                              ),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    currentUser?.name ?? 'Guest',
-                    style: TextStyle(
-                      fontFamily: 'Fraunces',
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    currentUser?.email ?? '',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Premium Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [NexusColors.teal, NexusColors.amber],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.workspace_premium,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Premium Member',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ),
 
-          // Stats
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
+            // Profile Header
+            SliverToBoxAdapter(
+              child: Padding(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: colors.border),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                child: Column(
                   children: [
-                    _StatItem(
-                      label: 'Articles Read',
-                      value: '248',
-                      isDark: isDark,
-                    ),
+                    // Avatar
                     Container(
-                      width: 1,
-                      height: 40,
-                      color: colors.border,
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: NexusColors.teal.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: NexusColors.teal, width: 3),
+                      ),
+                      child: widget.currentUser?.avatarUrl != null
+                          ? ClipOval(
+                              child: Image.network(
+                                widget.currentUser!.avatarUrl!,
+                                width: 100,
+                                height: 100,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _avatarInitials(),
+                              ),
+                            )
+                          : _avatarInitials(),
                     ),
-                    _StatItem(
-                      label: 'Quiz Score',
-                      value: '1,240',
-                      isDark: isDark,
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.currentUser?.name ?? 'Guest',
+                      style: TextStyle(
+                        fontFamily: 'Fraunces',
+                        fontSize: 24,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
                     ),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: colors.border,
-                    ),
-                    _StatItem(
-                      label: 'Day Streak',
-                      value: '15',
-                      isDark: isDark,
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.currentUser?.email ?? '',
+                      style: TextStyle(fontSize: 15, color: colors.textSecondary),
                     ),
                   ],
                 ),
               ),
             ),
-          ),
 
-          // Badges Section
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Achievements',
-                    style: TextStyle(
-                      fontFamily: 'Fraunces',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
+            // Premium banner (upgrade CTA or active badge)
+            if (_subscription != null && _subscription!.isPremium)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: NexusColors.amber.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: NexusColors.amber.withOpacity(0.35)),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+                    child: const Row(
                       children: [
-                        _BadgeItem(
-                          icon: Icons.local_fire_department,
-                          label: 'Hot Streak',
-                          color: Colors.orange,
-                          isDark: isDark,
-                        ),
-                        _BadgeItem(
-                          icon: Icons.quiz,
-                          label: 'Quiz Master',
-                          color: NexusColors.teal,
-                          isDark: isDark,
-                        ),
-                        _BadgeItem(
-                          icon: Icons.auto_stories,
-                          label: 'Bookworm',
-                          color: NexusColors.amber,
-                          isDark: isDark,
-                        ),
-                        _BadgeItem(
-                          icon: Icons.public,
-                          label: 'World Explorer',
-                          color: Colors.blue,
-                          isDark: isDark,
+                        Icon(Icons.stars, color: NexusColors.amber, size: 20),
+                        SizedBox(width: 10),
+                        Text(
+                          'Premium Member',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: NexusColors.amber,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-
-          // Saved Articles Section
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Saved Articles',
-                    style: TextStyle(
-                      fontFamily: 'Fraunces',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {},
-                    child: const Text(
-                      'See all',
-                      style: TextStyle(
-                        color: NexusColors.teal,
-                        fontWeight: FontWeight.w600,
+                ),
+              )
+            else if (_subscription == null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: GestureDetector(
+                    onTap: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => PremiumScreen(isDark: widget.isDark),
+                      ));
+                      _loadSubscription();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: NexusColors.teal.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: NexusColors.teal.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.workspace_premium_outlined,
+                              color: NexusColors.teal, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Upgrade to Premium',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios,
+                              color: NexusColors.teal, size: 14),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
+              ),
+
+            // Stats
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _loadingStats
+                    ? _StatsSkeleton(colors: colors)
+                    : _StatsRow(stats: _stats!, isDark: widget.isDark),
               ),
             ),
-          ),
 
-          // Saved Articles List
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final articles = [
-                    {
-                      'title': 'The Future of Renewable Energy',
-                      'source': 'Scientific American',
-                      'saved': '2 days ago',
-                    },
-                    {
-                      'title': 'Global Economic Outlook 2024',
-                      'source': 'The Economist',
-                      'saved': '5 days ago',
-                    },
-                    {
-                      'title': 'Advances in Quantum Computing',
-                      'source': 'Nature',
-                      'saved': '1 week ago',
-                    },
-                  ];
-
-                  if (index >= articles.length) return null;
-                  final article = articles[index];
-
-                  return _SavedArticleItem(
-                    title: article['title']!,
-                    source: article['source']!,
-                    saved: article['saved']!,
-                    isDark: isDark,
-                  );
-                },
-                childCount: 3,
+            // Bookmarks section header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
+                child: Text(
+                  'Saved Articles',
+                  style: TextStyle(
+                    fontFamily: 'Fraunces',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
               ),
             ),
-          ),
 
-          // Bottom Padding
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 100),
-          ),
+            // Bookmarks list
+            if (_loadingBookmarks)
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, __) => _BookmarkSkeleton(colors: colors),
+                    childCount: 3,
+                  ),
+                ),
+              )
+            else if (_bookmarks.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Text(
+                    'No saved articles yet.',
+                    style: TextStyle(color: colors.textSecondary),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, i) => _BookmarkCard(
+                      bookmark: _bookmarks[i],
+                      colors: colors,
+                    ),
+                    childCount: _bookmarks.length,
+                  ),
+                ),
+              ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _avatarInitials() {
+    return Center(
+      child: Text(
+        widget.currentUser?.initials ?? '?',
+        style: const TextStyle(
+          fontFamily: 'Fraunces',
+          fontSize: 36,
+          fontWeight: FontWeight.w600,
+          color: NexusColors.teal,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Stats row ─────────────────────────────────────────────────────────────────
+
+class _StatsRow extends StatelessWidget {
+  final UserStats stats;
+  final bool isDark;
+  const _StatsRow({required this.stats, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = DynamicColors(isDark);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _StatItem(label: 'Articles Read', value: stats.articlesRead.toString(), isDark: isDark),
+          Container(width: 1, height: 40, color: colors.border),
+          _StatItem(label: 'Total XP', value: _fmt(stats.totalXp), isDark: isDark),
+          Container(width: 1, height: 40, color: colors.border),
+          _StatItem(label: 'Day Streak', value: stats.currentStreak.toString(), isDark: isDark),
         ],
       ),
     );
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return n.toString();
   }
 }
 
@@ -328,22 +357,16 @@ class _StatItem extends StatelessWidget {
   final String label;
   final String value;
   final bool isDark;
-
-  const _StatItem({
-    required this.label,
-    required this.value,
-    required this.isDark,
-  });
+  const _StatItem({required this.label, required this.value, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
     final colors = DynamicColors(isDark);
-
     return Column(
       children: [
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'Fraunces',
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -351,86 +374,149 @@ class _StatItem extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: colors.textSecondary,
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 12, color: colors.textSecondary)),
       ],
     );
   }
 }
 
-class _BadgeItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool isDark;
-
-  const _BadgeItem({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.isDark,
-  });
+class _StatsSkeleton extends StatelessWidget {
+  final DynamicColors colors;
+  const _StatsSkeleton({required this.colors});
 
   @override
   Widget build(BuildContext context) {
-    final colors = DynamicColors(isDark);
-
     return Container(
-      margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.all(16),
+      height: 88,
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: colors.border),
       ),
-      child: Column(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 28),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: colors.textPrimary,
-            ),
-          ),
-        ],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(3, (i) => Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(width: 48, height: 24, decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(4))),
+            const SizedBox(height: 8),
+            Container(width: 64, height: 12, decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(4))),
+          ],
+        )),
       ),
     );
   }
 }
 
-class _SavedArticleItem extends StatelessWidget {
-  final String title;
-  final String source;
-  final String saved;
-  final bool isDark;
+// ── Bookmark card ─────────────────────────────────────────────────────────────
 
-  const _SavedArticleItem({
-    required this.title,
-    required this.source,
-    required this.saved,
-    required this.isDark,
-  });
+class _BookmarkCard extends StatelessWidget {
+  final BookmarkedArticle bookmark;
+  final DynamicColors colors;
+  const _BookmarkCard({required this.bookmark, required this.colors});
 
   @override
   Widget build(BuildContext context) {
-    final colors = DynamicColors(isDark);
+    return GestureDetector(
+      onTap: bookmark.article != null
+          ? () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ArticleScreen(
+                  article: bookmark.article!,
+                  isDark: colors.isDark,
+                  isBookmarked: true,
+                ),
+              ))
+          : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: colors.border),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: bookmark.imageUrl != null && bookmark.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      bookmark.imageUrl!,
+                      width: 60,
+                      height: 60,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _placeholder(),
+                    )
+                  : _placeholder(),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    bookmark.title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                      height: 1.3,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          bookmark.displaySource,
+                          style: TextStyle(fontSize: 12, color: colors.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                          width: 3,
+                          height: 3,
+                          decoration: BoxDecoration(
+                              color: colors.textSecondary,
+                              shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text(
+                        timeAgo(bookmark.publishedAt),
+                        style:
+                            TextStyle(fontSize: 12, color: colors.textSecondary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.bookmark, color: NexusColors.amber, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
 
+  Widget _placeholder() {
+    return Container(
+      width: 60,
+      height: 60,
+      color: colors.muted,
+      child: Icon(Icons.article, color: colors.textSecondary, size: 24),
+    );
+  }
+}
+
+class _BookmarkSkeleton extends StatelessWidget {
+  final DynamicColors colors;
+  const _BookmarkSkeleton({required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -441,71 +527,20 @@ class _SavedArticleItem extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: colors.muted,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.article,
-              color: colors.textSecondary,
-            ),
-          ),
-          const SizedBox(width: 16),
+          Container(width: 60, height: 60,
+              decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(8))),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Container(height: 14, decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(4))),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        source,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: colors.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 3,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: colors.textSecondary,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Saved $saved',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+                Container(width: 160, height: 14, decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(4))),
+                const SizedBox(height: 8),
+                Container(width: 100, height: 12, decoration: BoxDecoration(color: colors.muted, borderRadius: BorderRadius.circular(4))),
               ],
             ),
-          ),
-          Icon(
-            Icons.bookmark,
-            color: NexusColors.amber,
           ),
         ],
       ),

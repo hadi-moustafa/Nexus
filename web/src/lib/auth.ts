@@ -1,3 +1,5 @@
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -9,11 +11,11 @@ export interface AuthUser {
 /**
  * Validates the caller's identity from a Route Handler request.
  *
- * Uses the service-role client for JWT verification so it never touches
- * the auth-token cookie lock. Supports two paths:
- *
  * - Mobile: `Authorization: Bearer <access_token>` header
- * - Web:    Supabase session cookie (`sb-*-auth-token`)
+ *   Verified directly against Supabase via the service-role client.
+ *
+ * - Web: Supabase session cookie, read via createServerClient so the
+ *   cookie format is always handled correctly regardless of @supabase/ssr version.
  *
  * Returns an AuthUser on success, or a 401 NextResponse on failure.
  */
@@ -26,63 +28,44 @@ export async function requireAuth(
       { status: 401 }
     );
 
-  // Extract the JWT — prefer Authorization header (mobile), then cookie (web)
-  let token: string | null = null;
-
+  // ── Mobile: Authorization header ─────────────────────────────────────────
   const authHeader = request.headers.get("authorization");
   if (authHeader?.startsWith("Bearer ")) {
-    token = authHeader.slice(7);
-  } else {
-    // Parse the Supabase session cookie — it's a JSON-encoded object
-    const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL
-      ?.replace("https://", "")
-      .replace(".supabase.co", "");
-
-    const cookieName = `sb-${projectRef}-auth-token`;
-    const raw = request.cookies.get(cookieName)?.value;
-
-    if (raw) {
-      try {
-        // The cookie may be URL-encoded
-        const decoded = decodeURIComponent(raw);
-        const parsed = JSON.parse(decoded) as { access_token?: string };
-        token = parsed.access_token ?? null;
-      } catch {
-        // Malformed cookie — fall through to unauthorized
-      }
-    }
-
-    // Some Supabase versions chunk the cookie as base64 parts
-    if (!token) {
-      const chunkKeys = Array.from(request.cookies.getAll())
-        .map((c) => c.name)
-        .filter((n) => n.startsWith(`${cookieName}.`));
-
-      if (chunkKeys.length > 0) {
-        chunkKeys.sort();
-        const combined = chunkKeys
-          .map((k) => request.cookies.get(k)?.value ?? "")
-          .join("");
-        try {
-          const decoded = decodeURIComponent(combined);
-          const parsed = JSON.parse(decoded) as { access_token?: string };
-          token = parsed.access_token ?? null;
-        } catch {
-          // ignore
-        }
-      }
-    }
+    const token = authHeader.slice(7);
+    const supabase = createServiceClient();
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return unauthorized("Invalid or expired token");
+    return { userId: data.user.id, email: data.user.email };
   }
 
-  if (!token) return unauthorized();
+  // ── Web: cookie-based session via @supabase/ssr ───────────────────────────
+  // Use createServerClient instead of hand-rolling cookie parsing so that
+  // the correct cookie name, chunking, and encoding are handled automatically.
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+      {
+        cookies: {
+          getAll: () => cookieStore.getAll(),
+          setAll: (cookiesToSet) => {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Called from a Route Handler — safe to ignore set errors.
+            }
+          },
+        },
+      }
+    );
 
-  // Verify via service client — does NOT touch the cookie lock
-  const supabase = createServiceClient();
-  const { data, error } = await supabase.auth.getUser(token);
-
-  if (error || !data.user) {
-    return unauthorized("Invalid or expired token");
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return unauthorized();
+    return { userId: user.id, email: user.email };
+  } catch {
+    return unauthorized();
   }
-
-  return { userId: data.user.id, email: data.user.email };
 }

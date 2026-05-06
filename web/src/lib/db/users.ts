@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import type { UserProfile, UserPreferences, UserStats } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -36,12 +35,9 @@ function rowToStats(row: Record<string, unknown>): UserStats {
 
 // ---------------------------------------------------------------------------
 // getUserProfile
-// Used by /api/v1/auth/session to return the current user's profile.
-// Returns null if the row doesn't exist yet (edge case: trigger hasn't fired).
 // ---------------------------------------------------------------------------
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from("users")
@@ -61,8 +57,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 // getUserPreferences
 // ---------------------------------------------------------------------------
 export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from("user_preferences")
@@ -86,8 +81,7 @@ export async function updateUserPreferences(
   userId: string,
   patch: Partial<UserPreferences>
 ): Promise<UserPreferences> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createServiceClient();
 
   const dbPatch: Record<string, unknown> = {};
   if (patch.topics !== undefined) dbPatch.topics = patch.topics;
@@ -111,8 +105,7 @@ export async function updateUserPreferences(
 // getUserStats
 // ---------------------------------------------------------------------------
 export async function getUserStats(userId: string): Promise<UserStats | null> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from("user_stats")

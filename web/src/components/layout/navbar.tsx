@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Bell, Moon, Sun, LogIn, LogOut, Search, Newspaper, Globe, Trophy, Sparkles } from "lucide-react";
+import { Bell, Moon, Sun, LogIn, LogOut, Search, Newspaper, Globe, Trophy, Sparkles, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -20,6 +20,7 @@ export function Navbar() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -27,18 +28,38 @@ export function Navbar() {
     setMounted(true);
     const supabase = createClient();
 
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    // Get initial user state
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+      if (data.user) fetchRole();
+    });
 
+    // Keep user state in sync across tabs and after sign-in / sign-out
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        fetchRole();
+      } else {
+        setIsAdmin(false);
+      }
     });
 
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchRole = () => {
+    fetch("/api/v1/auth/session")
+      .then((r) => r.json())
+      .then(({ data }) => setIsAdmin(data?.isAdmin === true))
+      .catch(() => setIsAdmin(false));
+  };
 
   const handleSignOut = async () => {
     await fetch("/api/v1/auth/signout", { method: "POST" });
     setUser(null);
+    setIsAdmin(false);
     router.push("/login");
     router.refresh();
   };
@@ -77,6 +98,19 @@ export function Navbar() {
               </Link>
             );
           })}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                pathname.startsWith("/admin")
+                  ? "text-amber-500 bg-amber-500/10"
+                  : "text-[var(--text-secondary)] hover:text-amber-500 hover:bg-amber-500/10"
+              }`}
+            >
+              <ShieldCheck size={15} />
+              Admin
+            </Link>
+          )}
         </nav>
 
         {/* Actions */}
@@ -150,6 +184,17 @@ export function Navbar() {
             </Link>
           );
         })}
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-[10px] font-medium transition-colors ${
+              pathname.startsWith("/admin") ? "text-amber-500" : "text-[var(--text-secondary)]"
+            }`}
+          >
+            <ShieldCheck size={20} />
+            Admin
+          </Link>
+        )}
       </nav>
     </header>
   );

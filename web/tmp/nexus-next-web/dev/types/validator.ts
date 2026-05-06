@@ -479,6 +479,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../../src/app/api/v1/internal/generate-quizzes/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/internal/generate-quizzes">> = Specific
+  const handler = {} as typeof import("../../../../src/app/api/v1/internal/generate-quizzes/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../../src/app/api/v1/journalists/[id]/follow/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/journalists/[id]/follow">> = Specific

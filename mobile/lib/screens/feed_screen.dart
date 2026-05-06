@@ -1,14 +1,30 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
-import '../widgets/category_chip.dart';
 import '../models/article.dart';
 import '../services/articles_service.dart';
 import '../utils/time_utils.dart';
+import 'article_screen.dart';
+import 'search_screen.dart';
+
+// Mirrors the tab definitions in the web feed page.
+typedef _Tab = ({String label, String category, String language});
+
+const List<_Tab> _kTabs = [
+  (label: 'For You',       category: '',             language: ''),
+  (label: 'Lebanon',       category: 'lebanon',      language: ''),
+  (label: 'العربية',       category: '',             language: 'ar'),
+  (label: 'World',         category: 'world',        language: ''),
+  (label: 'Tech',          category: 'technology',   language: ''),
+  (label: 'Business',      category: 'business',     language: ''),
+  (label: 'Sports',        category: 'sports',       language: ''),
+  (label: 'Science',       category: 'science',      language: ''),
+  (label: 'Health',        category: 'health',       language: ''),
+  (label: 'Entertainment', category: 'entertainment',language: ''),
+];
 
 class FeedScreen extends StatefulWidget {
   final bool isDark;
-
   const FeedScreen({super.key, required this.isDark});
 
   @override
@@ -16,55 +32,85 @@ class FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<FeedScreen> {
-  String _selectedCategory = 'For You';
-
-  final List<String> _categories = [
-    'For You',
-    'World',
-    'Technology',
-    'Business',
-    'Science',
-    'Health',
-    'Sports',
-  ];
-
+  _Tab _activeTab = _kTabs[0];
   List<Article> _articles = [];
-  bool _isLoading = false;
+  bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  String? _cursor;
   String? _error;
 
-  // Maps UI category labels to API category param values.
-  // 'For You' → no filter (null). Others are lowercased.
-  String? get _apiCategory {
-    if (_selectedCategory == 'For You') return null;
-    return _selectedCategory.toLowerCase();
-  }
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _loadArticles();
+    _scrollController.addListener(_onScroll);
+    _load(reset: true);
   }
 
-  Future<void> _loadArticles() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-    try {
-      final result = await ArticlesService.instance.fetchArticles(
-        limit: 20,
-        category: _apiCategory,
-      );
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_loadingMore || !_hasMore) return;
+    final pos = _scrollController.position;
+    if (pos.pixels >= pos.maxScrollExtent - 300) {
+      _load(reset: false);
+    }
+  }
+
+  Future<void> _load({required bool reset}) async {
+    if (reset) {
       setState(() {
-        _articles = result.articles;
-        _isLoading = false;
+        _loading = true;
+        _error = null;
+        _articles = [];
+        _cursor = null;
+        _hasMore = false;
+      });
+    } else {
+      setState(() => _loadingMore = true);
+    }
+
+    try {
+      final tab = _activeTab;
+      final result = await ArticlesService.instance.fetchFeed(
+        limit: 20,
+        cursor: reset ? null : _cursor,
+        category: tab.category.isEmpty ? null : tab.category,
+        language: tab.language.isEmpty ? null : tab.language,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        if (reset) {
+          _articles = result.articles;
+        } else {
+          _articles = [..._articles, ...result.articles];
+        }
+        _cursor = result.nextCursor;
+        _hasMore = result.nextCursor != null;
+        _loading = false;
+        _loadingMore = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _error = 'Could not load articles';
-        _isLoading = false;
+        _loading = false;
+        _loadingMore = false;
       });
     }
+  }
+
+  void _selectTab(_Tab tab) {
+    if (tab.label == _activeTab.label) return;
+    setState(() => _activeTab = tab);
+    _load(reset: true);
   }
 
   @override
@@ -73,120 +119,79 @@ class _FeedScreenState extends State<FeedScreen> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      body: CustomScrollView(
-        slivers: [
-          // App Bar
-          SliverAppBar(
-            floating: true,
-            backgroundColor: colors.background,
-            elevation: 0,
-            title: Text(
-              'Your Feed',
-              style: TextStyle(
-                fontFamily: 'Fraunces',
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                color: colors.textPrimary,
+      body: RefreshIndicator(
+        color: NexusColors.teal,
+        onRefresh: () => _load(reset: true),
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // App bar
+            SliverAppBar(
+              floating: true,
+              backgroundColor: colors.background,
+              elevation: 0,
+              title: Text(
+                'Your Feed',
+                style: TextStyle(
+                  fontFamily: 'Fraunces',
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
               ),
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.search, color: colors.textPrimary),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SearchScreen(isDark: widget.isDark),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.search, color: colors.textPrimary),
-                onPressed: () {},
-              ),
-              IconButton(
-                icon: Icon(Icons.tune, color: colors.textPrimary),
-                onPressed: () {},
-              ),
-            ],
-          ),
 
-          // Category Chips
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: CategoryChipList(
-                categories: _categories,
-                selectedCategory: _selectedCategory,
+            // Category tabs
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _TabsDelegate(
+                tabs: _kTabs,
+                activeLabel: _activeTab.label,
                 isDark: widget.isDark,
-                onCategorySelected: (category) {
-                  setState(() => _selectedCategory = category);
-                  _loadArticles();
-                },
+                onSelected: _selectTab,
               ),
             ),
-          ),
 
-          // Lebanese Spotlight Section
-          SliverToBoxAdapter(
-            child: _SpotlightSection(isDark: widget.isDark),
-          ),
-
-          // Section Header
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Latest Stories',
-                    style: TextStyle(
-                      fontFamily: 'Fraunces',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.muted,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: colors.textSecondary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Just now',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            // Articles
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              sliver: _buildContent(colors),
             ),
-          ),
 
-          // Articles List
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: _buildArticleList(colors),
-          ),
+            // Load-more indicator
+            if (_loadingMore)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: NexusColors.teal,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+              ),
 
-          // Bottom Padding
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 100),
-          ),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildArticleList(DynamicColors colors) {
-    if (_isLoading) {
+  Widget _buildContent(DynamicColors colors) {
+    if (_loading) {
       return SliverList(
         delegate: SliverChildBuilderDelegate(
           (_, __) => _FeedSkeleton(colors: colors),
@@ -199,20 +204,16 @@ class _FeedScreenState extends State<FeedScreen> {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 32),
-          child: Center(
-            child: Column(
-              children: [
-                Text(_error!, style: TextStyle(color: colors.textSecondary)),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: _loadArticles,
-                  child: const Text(
-                    'Try again',
-                    style: TextStyle(color: NexusColors.teal),
-                  ),
-                ),
-              ],
-            ),
+          child: Column(
+            children: [
+              Text(_error!, style: TextStyle(color: colors.textSecondary)),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => _load(reset: true),
+                child: const Text('Try again',
+                    style: TextStyle(color: NexusColors.teal)),
+              ),
+            ],
           ),
         ),
       );
@@ -221,7 +222,7 @@ class _FeedScreenState extends State<FeedScreen> {
     if (_articles.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32),
+          padding: const EdgeInsets.symmetric(vertical: 48),
           child: Center(
             child: Text(
               'No articles in this category yet.',
@@ -238,11 +239,17 @@ class _FeedScreenState extends State<FeedScreen> {
           final article = _articles[index];
           return ArticleCard(
             title: article.title,
-            source: article.sourceId,
+            source: article.displaySource,
             timeAgo: timeAgo(article.publishedAt),
             category: article.category,
-            isDark: widget.isDark,
             imageUrl: article.imageUrl,
+            isDark: widget.isDark,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    ArticleScreen(article: article, isDark: widget.isDark),
+              ),
+            ),
           );
         },
         childCount: _articles.length,
@@ -251,122 +258,76 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 }
 
-class _SpotlightSection extends StatelessWidget {
-  final bool isDark;
+// ── Sticky tabs header ─────────────────────────────────────────────────────────
 
-  const _SpotlightSection({required this.isDark});
+class _TabsDelegate extends SliverPersistentHeaderDelegate {
+  final List<_Tab> tabs;
+  final String activeLabel;
+  final bool isDark;
+  final void Function(_Tab) onSelected;
+
+  const _TabsDelegate({
+    required this.tabs,
+    required this.activeLabel,
+    required this.isDark,
+    required this.onSelected,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final colors = DynamicColors(isDark);
+  double get minExtent => 52;
+  @override
+  double get maxExtent => 52;
 
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final colors = DynamicColors(isDark);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            NexusColors.amber.withOpacity(0.15),
-            NexusColors.teal.withOpacity(0.1),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: NexusColors.amber.withOpacity(0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: NexusColors.amber,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.location_on,
-                      color: Colors.white,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Lebanese Spotlight',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? NexusColors.darkBg : Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+      color: colors.background,
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: tabs.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final tab = tabs[i];
+          final active = tab.label == activeLabel;
+          return GestureDetector(
+            onTap: () => onSelected(tab),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color:
+                    active ? NexusColors.teal : colors.muted,
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Beirut Tech Week Showcases Regional Innovation',
-            style: TextStyle(
-              fontFamily: 'Fraunces',
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: colors.textPrimary,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Annual technology conference brings together startups, investors, and industry leaders from across the MENA region.',
-            style: TextStyle(
-              fontSize: 14,
-              color: colors.textSecondary,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                'L\'Orient Today',
+              child: Text(
+                tab.label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: colors.textSecondary,
+                  fontWeight:
+                      active ? FontWeight.w600 : FontWeight.w400,
+                  color:
+                      active ? Colors.white : colors.textSecondary,
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: colors.textSecondary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '30 min ago',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: colors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          );
+        },
       ),
     );
   }
+
+  @override
+  bool shouldRebuild(_TabsDelegate old) =>
+      old.activeLabel != activeLabel || old.isDark != isDark;
 }
 
-/// Skeleton placeholder shown while feed articles are loading.
+// ── Skeleton ───────────────────────────────────────────────────────────────────
+
 class _FeedSkeleton extends StatelessWidget {
   final DynamicColors colors;
   const _FeedSkeleton({required this.colors});

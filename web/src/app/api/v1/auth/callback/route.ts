@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/v1/auth/callback
@@ -8,8 +8,6 @@ import { createClient } from "@/lib/supabase/server";
  * OAuth code exchange handler. Supabase redirects here after Google
  * consent with a one-time `code` query param. This route exchanges it
  * for a session cookie and redirects the user into the app.
- *
- * The `redirectTo` option in signInWithOAuth() must point to this URL.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
@@ -30,19 +28,58 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=auth_failed`);
   }
 
-  // For new users (first sign-in), redirect to onboarding
   if (sessionData?.user) {
-    const { data: prefs } = await supabase
+    const user = sessionData.user;
+
+    // Belt-and-suspenders: ensure DB rows exist even if the trigger was slow
+    // or hadn't fired yet. All upserts are idempotent.
+    const service = createServiceClient();
+    await Promise.all([
+      service.from("users").upsert(
+        {
+          id: user.id,
+          email: user.email,
+          display_name:
+            user.user_metadata?.full_name ??
+            user.user_metadata?.name ??
+            null,
+          avatar_url:
+            user.user_metadata?.avatar_url ??
+            user.user_metadata?.picture ??
+            null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      ),
+      service.from("user_preferences").upsert(
+        { user_id: user.id, topics: [], preferred_language: "en", onboarding_complete: false },
+        { onConflict: "user_id", ignoreDuplicates: true }
+      ),
+      service.from("user_stats").upsert(
+        {
+          user_id: user.id,
+          total_xp: 0,
+          current_streak: 0,
+          longest_streak: 0,
+          quizzes_completed: 0,
+          perfect_scores: 0,
+          articles_read: 0,
+        },
+        { onConflict: "user_id", ignoreDuplicates: true }
+      ),
+    ]);
+
+    // Check onboarding status using service client (bypasses RLS, always works)
+    const { data: prefs } = await service
       .from("user_preferences")
       .select("onboarding_complete")
-      .eq("user_id", sessionData.user.id)
+      .eq("user_id", user.id)
       .single();
 
-    if (!prefs || !prefs.onboarding_complete) {
+    if (!prefs?.onboarding_complete) {
       return NextResponse.redirect(`${origin}/onboarding`);
     }
   }
 
-  // Redirect to the originally intended destination, or feed
   return NextResponse.redirect(`${origin}${next === "/" ? "/feed" : next}`);
 }

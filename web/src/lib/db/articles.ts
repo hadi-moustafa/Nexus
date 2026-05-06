@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { createClient, createPublicClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/server";
 import type { Article } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -26,8 +25,6 @@ function rowToArticle(row: Record<string, unknown>): Article {
     aiSummary: (row.ai_summary as string | null) ?? null,
     viewCount: (row.view_count as number) ?? 0,
     journalistId: (row.journalist_id as string | null) ?? null,
-    // journalistName is only populated by getArticleById (separate lookup).
-    // List queries omit the join to avoid a schema mismatch error.
     journalistName: null,
   };
 }
@@ -49,7 +46,6 @@ function decodeCursor(cursor: string): string | null {
 
 // ---------------------------------------------------------------------------
 // getTrendingArticles
-// Used by the TrendingFeed server component (direct DB call, no HTTP hop).
 // ---------------------------------------------------------------------------
 export async function getTrendingArticles(opts: {
   limit?: number;
@@ -57,9 +53,6 @@ export async function getTrendingArticles(opts: {
 } = {}): Promise<{ articles: Article[]; nextCursor: string | null }> {
   const { limit = 10, cursor } = opts;
 
-  // Use cookie-free client — this is a public read with no auth required.
-  // Avoids Supabase auth-token lock contention when multiple server components
-  // render concurrently on the same request.
   const supabase = createPublicClient();
 
   let query = supabase
@@ -88,10 +81,9 @@ export async function getTrendingArticles(opts: {
 
 // ---------------------------------------------------------------------------
 // getArticles
-// Paginated list with optional filters.
-// Used by /api/v1/articles and /api/v1/feed.
+// Paginated list with optional filters. Uses public client — articles are
+// publicly readable (RLS: USING (true)), no cookie/session needed.
 // ---------------------------------------------------------------------------
-// Keywords used for the Lebanon filter — matches both English and Arabic titles/descriptions
 const LEBANON_FILTER =
   "title.ilike.%Lebanon%,title.ilike.%لبنان%," +
   "description.ilike.%Lebanon%,description.ilike.%لبنان%";
@@ -106,8 +98,7 @@ export async function getArticles(opts: {
 } = {}): Promise<{ articles: Article[]; nextCursor: string | null }> {
   const { limit = 20, cursor, category, countryCode, language, topics } = opts;
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createPublicClient();
 
   let query = supabase
     .from("articles")
@@ -115,7 +106,6 @@ export async function getArticles(opts: {
     .order("published_at", { ascending: false })
     .limit(limit + 1);
 
-  // "lebanon" is a virtual category — filter by keyword across all real categories
   if (category === "lebanon") {
     query = query.or(LEBANON_FILTER);
   } else if (category) {
@@ -123,7 +113,6 @@ export async function getArticles(opts: {
   }
 
   if (countryCode) query = query.eq("country_code", countryCode);
-  // Language filter: only apply when explicitly requested (not from user prefs)
   if (language) query = query.eq("language", language);
   if (topics && topics.length > 0) query = query.in("category", topics);
 
@@ -147,12 +136,9 @@ export async function getArticles(opts: {
 
 // ---------------------------------------------------------------------------
 // getArticleById
-// Used by /api/v1/articles/[id] and the article reader page.
-// Fetches the article then does a separate lookup for journalist name.
 // ---------------------------------------------------------------------------
 export async function getArticleById(id: string): Promise<Article | null> {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createPublicClient();
 
   const { data, error } = await supabase
     .from("articles")
@@ -168,7 +154,6 @@ export async function getArticleById(id: string): Promise<Article | null> {
 
   const article = rowToArticle(data as Record<string, unknown>);
 
-  // Fetch journalist name separately if the article has a journalist_id
   if (article.journalistId) {
     const { data: journalist } = await supabase
       .from("journalists")
@@ -186,7 +171,6 @@ export async function getArticleById(id: string): Promise<Article | null> {
 
 // ---------------------------------------------------------------------------
 // searchArticles
-// ilike on title + description. Used by /api/v1/search.
 // ---------------------------------------------------------------------------
 export async function searchArticles(opts: {
   query: string;
@@ -197,8 +181,7 @@ export async function searchArticles(opts: {
 }): Promise<{ articles: Article[]; nextCursor: string | null }> {
   const { query, limit = 20, cursor, category, language } = opts;
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createPublicClient();
 
   let q = supabase
     .from("articles")

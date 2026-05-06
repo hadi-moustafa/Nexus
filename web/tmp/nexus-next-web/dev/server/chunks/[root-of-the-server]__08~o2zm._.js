@@ -96,8 +96,13 @@ __turbopack_context__.s([
     "requireAuth",
     ()=>requireAuth
 ]);
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$ssr$2f$dist$2f$module$2f$index$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i("[project]/node_modules/@supabase/ssr/dist/module/index.js [app-route] (ecmascript) <locals>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$ssr$2f$dist$2f$module$2f$createServerClient$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/@supabase/ssr/dist/module/createServerClient.js [app-route] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/headers.js [app-route] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/server.js [app-route] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/lib/supabase/server.ts [app-route] (ecmascript)");
+;
+;
 ;
 ;
 async function requireAuth(request) {
@@ -109,53 +114,44 @@ async function requireAuth(request) {
         }, {
             status: 401
         });
-    // Extract the JWT — prefer Authorization header (mobile), then cookie (web)
-    let token = null;
+    // ── Mobile: Authorization header ─────────────────────────────────────────
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
-        token = authHeader.slice(7);
-    } else {
-        // Parse the Supabase session cookie — it's a JSON-encoded object
-        const projectRef = ("TURBOPACK compile-time value", "https://gfbcwqeocdrzbyaenlnh.supabase.co")?.replace("https://", "").replace(".supabase.co", "");
-        const cookieName = `sb-${projectRef}-auth-token`;
-        const raw = request.cookies.get(cookieName)?.value;
-        if (raw) {
-            try {
-                // The cookie may be URL-encoded
-                const decoded = decodeURIComponent(raw);
-                const parsed = JSON.parse(decoded);
-                token = parsed.access_token ?? null;
-            } catch  {
-            // Malformed cookie — fall through to unauthorized
-            }
-        }
-        // Some Supabase versions chunk the cookie as base64 parts
-        if (!token) {
-            const chunkKeys = Array.from(request.cookies.getAll()).map((c)=>c.name).filter((n)=>n.startsWith(`${cookieName}.`));
-            if (chunkKeys.length > 0) {
-                chunkKeys.sort();
-                const combined = chunkKeys.map((k)=>request.cookies.get(k)?.value ?? "").join("");
-                try {
-                    const decoded = decodeURIComponent(combined);
-                    const parsed = JSON.parse(decoded);
-                    token = parsed.access_token ?? null;
-                } catch  {
-                // ignore
+        const token = authHeader.slice(7);
+        const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
+        const { data, error } = await supabase.auth.getUser(token);
+        if (error || !data.user) return unauthorized("Invalid or expired token");
+        return {
+            userId: data.user.id,
+            email: data.user.email
+        };
+    }
+    // ── Web: cookie-based session via @supabase/ssr ───────────────────────────
+    // Use createServerClient instead of hand-rolling cookie parsing so that
+    // the correct cookie name, chunking, and encoding are handled automatically.
+    try {
+        const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
+        const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$ssr$2f$dist$2f$module$2f$createServerClient$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServerClient"])(("TURBOPACK compile-time value", "https://gfbcwqeocdrzbyaenlnh.supabase.co"), ("TURBOPACK compile-time value", "sb_publishable_-m1X2AYSipLmAQ5OYafaDA_ruIVwSR6"), {
+            cookies: {
+                getAll: ()=>cookieStore.getAll(),
+                setAll: (cookiesToSet)=>{
+                    try {
+                        cookiesToSet.forEach(({ name, value, options })=>cookieStore.set(name, value, options));
+                    } catch  {
+                    // Called from a Route Handler — safe to ignore set errors.
+                    }
                 }
             }
-        }
+        });
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) return unauthorized();
+        return {
+            userId: user.id,
+            email: user.email
+        };
+    } catch  {
+        return unauthorized();
     }
-    if (!token) return unauthorized();
-    // Verify via service client — does NOT touch the cookie lock
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) {
-        return unauthorized("Invalid or expired token");
-    }
-    return {
-        userId: data.user.id,
-        email: data.user.email
-    };
 }
 }),
 "[project]/src/lib/db/users.ts [app-route] (ecmascript)", ((__turbopack_context__) => {
@@ -171,9 +167,7 @@ __turbopack_context__.s([
     "updateUserPreferences",
     ()=>updateUserPreferences
 ]);
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/headers.js [app-route] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/lib/supabase/server.ts [app-route] (ecmascript)");
-;
 ;
 // ---------------------------------------------------------------------------
 // Row mapping — snake_case DB columns → camelCase API types
@@ -205,8 +199,7 @@ function rowToStats(row) {
     };
 }
 async function getUserProfile(userId) {
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
     const { data, error } = await supabase.from("users").select("id, email, display_name, avatar_url, created_at").eq("id", userId).single();
     if (error) {
         if (error.code === "PGRST116") return null; // not found
@@ -215,8 +208,7 @@ async function getUserProfile(userId) {
     return data ? rowToUserProfile(data) : null;
 }
 async function getUserPreferences(userId) {
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
     const { data, error } = await supabase.from("user_preferences").select("topics, preferred_language, onboarding_complete").eq("user_id", userId).single();
     if (error) {
         if (error.code === "PGRST116") return null;
@@ -225,8 +217,7 @@ async function getUserPreferences(userId) {
     return data ? rowToPreferences(data) : null;
 }
 async function updateUserPreferences(userId, patch) {
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
     const dbPatch = {};
     if (patch.topics !== undefined) dbPatch.topics = patch.topics;
     if (patch.preferredLanguage !== undefined) dbPatch.preferred_language = patch.preferredLanguage;
@@ -237,8 +228,7 @@ async function updateUserPreferences(userId, patch) {
     return rowToPreferences(data);
 }
 async function getUserStats(userId) {
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
     const { data, error } = await supabase.from("user_stats").select("total_xp, current_streak, longest_streak, quizzes_completed, perfect_scores, articles_read").eq("user_id", userId).single();
     if (error) {
         if (error.code === "PGRST116") return null;

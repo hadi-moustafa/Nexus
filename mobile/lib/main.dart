@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +13,7 @@ import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/payment_callback_service.dart';
 import 'models/user_profile.dart';
 
 void main() async {
@@ -19,10 +22,13 @@ void main() async {
   await Supabase.initialize(
     url: ApiConfig.supabaseUrl,
     anonKey: ApiConfig.supabaseAnonKey,
-    // Implicit flow: tokens are returned in the URL hash on redirect.
-    // PKCE (the default) loses the code verifier on page reload in Flutter Web.
-    authOptions: const FlutterAuthClientOptions(
-      authFlowType: AuthFlowType.implicit,
+    authOptions: FlutterAuthClientOptions(
+      // PKCE on native: redirect carries ?code= (query param) which Android
+      // intent handling preserves. Implicit flow uses #fragment which Android
+      // strips from deep-link URIs — tokens never arrive, session never set.
+      // Web keeps implicit because PKCE's in-memory code verifier is lost on
+      // a full page reload (the OAuth redirect reloads the page on web).
+      authFlowType: kIsWeb ? AuthFlowType.implicit : AuthFlowType.pkce,
     ),
   );
 
@@ -49,39 +55,57 @@ class _NexusAppState extends State<NexusApp> {
   ThemeMode _themeMode = ThemeMode.dark;
   _AuthState _authState = _AuthState.loading;
   UserProfile? _currentUser;
+  StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription<Uri>? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
     _checkSession();
 
-    // On web: listen for Supabase auth state changes so that the OAuth
-    // redirect flow (which reloads the page) transitions to home automatically.
-    if (kIsWeb) {
-      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-        if (data.event == AuthChangeEvent.signedIn &&
-            _authState != _AuthState.authenticated) {
-          _checkSession();
-        } else if (data.event == AuthChangeEvent.signedOut) {
-          if (mounted) {
-            setState(() {
-              _authState = _AuthState.unauthenticated;
-              _currentUser = null;
-            });
-          }
+    // Listen for Supabase auth state changes on all platforms.
+    // On web: handles the OAuth redirect page reload.
+    // On native: handles the deep-link OAuth callback and email sign-in.
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn &&
+          _authState != _AuthState.authenticated) {
+        _checkSession();
+      } else if (data.event == AuthChangeEvent.signedOut) {
+        if (mounted) {
+          setState(() {
+            _authState = _AuthState.unauthenticated;
+            _currentUser = null;
+          });
         }
-      });
-    }
+      }
+    });
 
     // Listen for auth expiry from the ApiClient interceptor.
     // When token refresh fails mid-session, force back to login.
     ApiClient.instance.needsLoginNotifier.addListener(_onNeedsLogin);
+
+    // Listen for deep links (OAuth + payment callbacks).
+    _linkSubscription = AppLinks().uriLinkStream.listen(_handleDeepLink);
   }
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
+    _linkSubscription?.cancel();
     ApiClient.instance.needsLoginNotifier.removeListener(_onNeedsLogin);
     super.dispose();
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.host == 'payment-callback') {
+      final status = uri.queryParameters['status'];
+      final sessionId = uri.queryParameters['session_id'];
+      if (status == 'success' && sessionId != null && sessionId.isNotEmpty) {
+        PaymentCallbackService.instance.onSuccess(sessionId);
+      } else {
+        PaymentCallbackService.instance.onCanceled();
+      }
+    }
   }
 
   void _onNeedsLogin() {

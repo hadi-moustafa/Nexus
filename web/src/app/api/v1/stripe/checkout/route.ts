@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { plan } = await request.json() as { plan: PlanKey };
+    const { plan, successUrl: customSuccessUrl, cancelUrl: customCancelUrl } = await request.json() as { plan: PlanKey; successUrl?: string; cancelUrl?: string };
 
     if (!plan || !(plan in PLANS)) {
       return NextResponse.json(
@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [{ price: planConfig.priceId, quantity: 1 }],
-      success_url: `${origin}/premium?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/premium?canceled=true`,
+      success_url: customSuccessUrl ?? `${origin}/premium?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: customCancelUrl ?? `${origin}/premium?canceled=true`,
       metadata: { nexus_user_id: auth.userId, plan },
       subscription_data: {
         metadata: { nexus_user_id: auth.userId, plan },

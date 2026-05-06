@@ -4,6 +4,7 @@ import '../widgets/article_card.dart';
 import '../models/article.dart';
 import '../services/articles_service.dart';
 import '../utils/time_utils.dart';
+import 'article_screen.dart';
 import 'country_panel.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -288,11 +289,16 @@ class _HomeScreenState extends State<HomeScreen> {
           final article = _trendingArticles[index];
           return ArticleCard(
             title: article.title,
-            source: article.sourceId,
+            source: article.displaySource,
             timeAgo: timeAgo(article.publishedAt),
             category: article.category,
             isDark: widget.isDark,
             imageUrl: article.imageUrl,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ArticleScreen(article: article, isDark: widget.isDark),
+              ),
+            ),
           );
         },
         childCount: _trendingArticles.length,

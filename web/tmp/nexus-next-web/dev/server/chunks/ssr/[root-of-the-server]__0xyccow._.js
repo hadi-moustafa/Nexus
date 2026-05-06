@@ -209,9 +209,7 @@ __turbopack_context__.s([
     "searchArticles",
     ()=>searchArticles
 ]);
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/next/headers.js [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/lib/supabase/server.ts [app-rsc] (ecmascript)");
-;
 ;
 // ---------------------------------------------------------------------------
 // Row mapping
@@ -237,8 +235,6 @@ function rowToArticle(row) {
         aiSummary: row.ai_summary ?? null,
         viewCount: row.view_count ?? 0,
         journalistId: row.journalist_id ?? null,
-        // journalistName is only populated by getArticleById (separate lookup).
-        // List queries omit the join to avoid a schema mismatch error.
         journalistName: null
     };
 }
@@ -257,9 +253,6 @@ function decodeCursor(cursor) {
 }
 async function getTrendingArticles(opts = {}) {
     const { limit = 10, cursor } = opts;
-    // Use cookie-free client — this is a public read with no auth required.
-    // Avoids Supabase auth-token lock contention when multiple server components
-    // render concurrently on the same request.
     const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createPublicClient"])();
     let query = supabase.from("articles").select("*").order("published_at", {
         ascending: false
@@ -280,26 +273,22 @@ async function getTrendingArticles(opts = {}) {
 }
 // ---------------------------------------------------------------------------
 // getArticles
-// Paginated list with optional filters.
-// Used by /api/v1/articles and /api/v1/feed.
+// Paginated list with optional filters. Uses public client — articles are
+// publicly readable (RLS: USING (true)), no cookie/session needed.
 // ---------------------------------------------------------------------------
-// Keywords used for the Lebanon filter — matches both English and Arabic titles/descriptions
 const LEBANON_FILTER = "title.ilike.%Lebanon%,title.ilike.%لبنان%," + "description.ilike.%Lebanon%,description.ilike.%لبنان%";
 async function getArticles(opts = {}) {
     const { limit = 20, cursor, category, countryCode, language, topics } = opts;
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createPublicClient"])();
     let query = supabase.from("articles").select("*").order("published_at", {
         ascending: false
     }).limit(limit + 1);
-    // "lebanon" is a virtual category — filter by keyword across all real categories
     if (category === "lebanon") {
         query = query.or(LEBANON_FILTER);
     } else if (category) {
         query = query.eq("category", category);
     }
     if (countryCode) query = query.eq("country_code", countryCode);
-    // Language filter: only apply when explicitly requested (not from user prefs)
     if (language) query = query.eq("language", language);
     if (topics && topics.length > 0) query = query.in("category", topics);
     if (cursor) {
@@ -317,8 +306,7 @@ async function getArticles(opts = {}) {
     };
 }
 async function getArticleById(id) {
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createPublicClient"])();
     const { data, error } = await supabase.from("articles").select("*").eq("id", id).single();
     if (error) {
         if (error.code === "PGRST116") return null;
@@ -326,7 +314,6 @@ async function getArticleById(id) {
     }
     if (!data) return null;
     const article = rowToArticle(data);
-    // Fetch journalist name separately if the article has a journalist_id
     if (article.journalistId) {
         const { data: journalist } = await supabase.from("journalists").select("name").eq("id", article.journalistId).single();
         if (journalist) {
@@ -337,8 +324,7 @@ async function getArticleById(id) {
 }
 async function searchArticles(opts) {
     const { query, limit = 20, cursor, category, language } = opts;
-    const cookieStore = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$headers$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["cookies"])();
-    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createClient"])(cookieStore);
+    const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createPublicClient"])();
     let q = supabase.from("articles").select("*").or(`title.ilike.%${query}%,description.ilike.%${query}%`).order("published_at", {
         ascending: false
     }).limit(limit + 1);

@@ -1,0 +1,49 @@
+import '../models/user_stats.dart';
+import 'api_client.dart';
+
+class UserService {
+  UserService._();
+  static final UserService instance = UserService._();
+
+  Future<UserStats> fetchStats() async {
+    final response = await ApiClient.instance.get('/user/stats');
+    return UserStats.fromJson(response.data['data'] as Map<String, dynamic>);
+  }
+
+  Future<({List<BookmarkedArticle> bookmarks, String? nextCursor})>
+      fetchBookmarks({int limit = 20, String? cursor}) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (cursor != null) params['cursor'] = cursor;
+
+    final response = await ApiClient.instance
+        .get('/user/bookmarks', queryParameters: params);
+    final data = response.data['data'] as List<dynamic>;
+    final meta = response.data['meta'] as Map<String, dynamic>?;
+
+    return (
+      bookmarks: data
+          .map((b) =>
+              BookmarkedArticle.fromJson(b as Map<String, dynamic>))
+          .toList(),
+      nextCursor: meta?['nextCursor'] as String?,
+    );
+  }
+
+  /// Adds an article to bookmarks.
+  /// Throws on error. Returns the bookmark id.
+  Future<String> addBookmark(String articleId) async {
+    final response = await ApiClient.instance.post(
+      '/user/bookmarks',
+      data: {'articleId': articleId},
+    );
+    return response.data['data']['id'] as String;
+  }
+
+  /// Removes an article from bookmarks.
+  Future<void> removeBookmark(String articleId) async {
+    await ApiClient.instance.delete(
+      '/user/bookmarks',
+      queryParameters: {'articleId': articleId},
+    );
+  }
+}
