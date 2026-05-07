@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { LayoutDashboard, Users, Rss, MessageSquare, Pen, CreditCard, Trophy } from "lucide-react";
+import { LayoutDashboard, Users, Rss, MessageSquare, Pen, CreditCard, Trophy, BarChart2 } from "lucide-react";
 import { requireAdminPage } from "@/lib/admin";
 
 const NAV = [
   { href: "/admin",               label: "Overview",      icon: LayoutDashboard },
+  { href: "/admin/metrics",       label: "Metrics",       icon: BarChart2 },
   { href: "/admin/users",         label: "Users",         icon: Users },
   { href: "/admin/sources",       label: "Sources",       icon: Rss },
   { href: "/admin/comments",      label: "Comments",      icon: MessageSquare },

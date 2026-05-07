@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -20,7 +20,7 @@ function friendlyError(raw: string): string {
   return "Something went wrong. Please try again.";
 }
 
-// ── shared input styles ────────────────────────────────────────────────────────
+// ── shared styles ─────────────────────────────────────────────────────────────
 
 const inputCls =
   "w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] text-sm placeholder:text-[var(--text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all";
@@ -28,7 +28,7 @@ const inputCls =
 const primaryBtn =
   "w-full py-3 rounded-xl bg-[var(--primary)] text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
 
-// ── error box ──────────────────────────────────────────────────────────────────
+// ── sub-components ────────────────────────────────────────────────────────────
 
 function ErrorBox({ message }: { message: string }) {
   return (
@@ -41,7 +41,14 @@ function ErrorBox({ message }: { message: string }) {
   );
 }
 
-// ── Google button ──────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+    </svg>
+  );
+}
 
 function GoogleButton() {
   const [loading, setLoading] = useState(false);
@@ -53,7 +60,6 @@ function GoogleButton() {
       provider: "google",
       options: { redirectTo: `${window.location.origin}/api/v1/auth/callback` },
     });
-    // browser redirects — no cleanup needed
   };
 
   return (
@@ -76,10 +82,10 @@ function GoogleButton() {
 // ── sign-in form ───────────────────────────────────────────────────────────────
 
 function SignInForm() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,7 +94,10 @@ function SignInForm() {
     setError(null);
 
     const supabase = createClient();
-    const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
     if (err) {
       setError(friendlyError(err.message));
@@ -96,16 +105,10 @@ function SignInForm() {
       return;
     }
 
-    // Check onboarding status — new users or users who never finished
-    // onboarding should be sent there first.
     try {
       const res = await fetch("/api/v1/user/preferences");
       const { data: prefs } = await res.json();
-      if (!prefs?.onboardingComplete) {
-        router.push("/onboarding");
-      } else {
-        router.push("/feed");
-      }
+      router.push(prefs?.onboardingComplete ? "/feed" : "/onboarding");
     } catch {
       router.push("/feed");
     }
@@ -115,112 +118,147 @@ function SignInForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        required
-        className={inputCls}
+        type="email" placeholder="Email" value={email}
+        onChange={e => setEmail(e.target.value)} required className={inputCls}
         autoComplete="email"
       />
       <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        required
-        className={inputCls}
+        type="password" placeholder="Password" value={password}
+        onChange={e => setPassword(e.target.value)} required className={inputCls}
         autoComplete="current-password"
       />
       {error && <ErrorBox message={error} />}
       <button type="submit" disabled={loading} className={primaryBtn}>
-        {loading && (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-          </svg>
-        )}
+        {loading && <Spinner />}
         {loading ? "Signing in…" : "Sign In"}
       </button>
     </form>
   );
 }
 
-// ── sign-up form ───────────────────────────────────────────────────────────────
+// ── OTP input ─────────────────────────────────────────────────────────────────
 
-function SignUpForm() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+function OtpInput({
+  email,
+  password,
+  onVerified,
+  onBack,
+}: {
+  email: string;
+  password: string;
+  onVerified: () => void;
+  onBack: () => void;
+}) {
+  const [digits, setDigits]   = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [awaitingConfirm, setAwaitingConfirm] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
   const [resending, setResending] = useState(false);
-  const [resent, setResent] = useState(false);
-  const router = useRouter();
+  const [resent, setResent]   = useState(false);
+  const inputRefs             = useRef<(HTMLInputElement | null)[]>([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleChange = (idx: number, val: string) => {
+    if (!/^\d*$/.test(val)) return;
+    const next = [...digits];
+    next[idx] = val.slice(-1);
+    setDigits(next);
+    if (val && idx < 5) inputRefs.current[idx + 1]?.focus();
+    if (next.every(d => d) && val) {
+      void submitOtp(next.join(""));
+    }
+  };
+
+  const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !digits[idx] && idx > 0) {
+      inputRefs.current[idx - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (pasted.length === 6) {
+      setDigits(pasted.split(""));
+      void submitOtp(pasted);
+    }
     e.preventDefault();
-    if (password !== confirm) { setError("Passwords do not match."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+  };
 
+  const submitOtp = async (token: string) => {
     setLoading(true);
     setError(null);
-
-    const supabase = createClient();
-    const { data, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
-
-    if (err) {
-      setError(friendlyError(err.message));
+    const res = await fetch("/api/v1/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify", email, token, password }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setError(json.error?.message ?? "Invalid code. Please try again.");
+      setDigits(["", "", "", "", "", ""]);
       setLoading(false);
+      inputRefs.current[0]?.focus();
       return;
     }
-
-    if (data.session) {
-      router.push("/onboarding");
-      router.refresh();
-      return;
-    }
-
-    // Email confirmation required — try signing in anyway (handles disabled-confirm projects)
-    const { data: signInData } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (signInData.session) {
-      router.push("/onboarding");
-      router.refresh();
-      return;
-    }
-
-    setLoading(false);
-    setAwaitingConfirm(true);
+    onVerified();
   };
 
   const handleResend = async () => {
     setResending(true);
-    const supabase = createClient();
-    await supabase.auth.resend({ type: "signup", email: email.trim() });
+    await fetch("/api/v1/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send", email }),
+    });
     setResending(false);
     setResent(true);
+    setTimeout(() => setResent(false), 5000);
   };
 
-  if (awaitingConfirm) {
-    return (
-      <div className="flex flex-col items-center gap-4 py-2 text-center">
-        <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="text-[var(--primary)]">
-            <path d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+  return (
+    <div className="flex flex-col items-center gap-5">
+      <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="text-[var(--primary)]">
+          <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div className="text-center">
+        <p className="font-semibold text-[var(--text-primary)]">Check your email</p>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
+          We sent a 6-digit code to<br/>
+          <span className="font-medium text-[var(--text-primary)]">{email}</span>
+        </p>
+      </div>
+
+      {/* 6-digit inputs */}
+      <div className="flex gap-2" onPaste={handlePaste}>
+        {digits.map((d, i) => (
+          <input
+            key={i}
+            ref={el => { inputRefs.current[i] = el; }}
+            type="text"
+            inputMode="numeric"
+            maxLength={1}
+            value={d}
+            onChange={e => handleChange(i, e.target.value)}
+            onKeyDown={e => handleKeyDown(i, e)}
+            disabled={loading}
+            className="w-11 h-12 text-center text-lg font-bold rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all disabled:opacity-50"
+          />
+        ))}
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+          <Spinner /> Verifying…
         </div>
-        <div>
-          <p className="font-semibold text-[var(--text-primary)]">Check your inbox</p>
-          <p className="text-sm text-[var(--text-secondary)] mt-1 leading-relaxed">
-            We sent a confirmation link to<br/>
-            <span className="text-[var(--text-primary)] font-medium">{email}</span>
-          </p>
-        </div>
+      )}
+
+      <div className="flex flex-col items-center gap-2 w-full">
         {resent ? (
           <p className="text-sm text-[var(--primary)] font-medium flex items-center gap-1.5">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            Email resent!
+            Code resent!
           </p>
         ) : (
           <button
@@ -228,57 +266,106 @@ function SignUpForm() {
             disabled={resending}
             className="text-sm text-[var(--primary)] font-semibold hover:underline disabled:opacity-50"
           >
-            {resending ? "Resending…" : "Resend confirmation email"}
+            {resending ? "Resending…" : "Resend code"}
           </button>
         )}
         <button
-          onClick={() => setAwaitingConfirm(false)}
+          onClick={onBack}
           className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
         >
-          Back to sign up
+          Back
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── sign-up form ───────────────────────────────────────────────────────────────
+
+function SignUpForm() {
+  const [email, setEmail]       = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm]   = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [otpStep, setOtpStep]   = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== confirm) { setError("Passwords do not match."); return; }
+    if (password.length < 6)  { setError("Password must be at least 6 characters."); return; }
+
+    setLoading(true);
+    setError(null);
+
+    // 1. Check whether this email is already registered
+    const checkRes = await fetch("/api/v1/auth/check-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    const checkJson = await checkRes.json();
+    if (checkJson.data?.exists) {
+      setError("An account with this email already exists. Please sign in.");
+      setLoading(false);
+      return;
+    }
+
+    // 2. Send OTP via our SMTP
+    const sendRes = await fetch("/api/v1/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send", email: email.trim() }),
+    });
+    const sendJson = await sendRes.json();
+    if (!sendRes.ok) {
+      setError(sendJson.error?.message ?? "Failed to send verification code.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(false);
+    setOtpStep(true);
+  };
+
+  const handleOtpVerified = () => {
+    router.push("/onboarding");
+    router.refresh();
+  };
+
+  if (otpStep) {
+    return (
+      <OtpInput
+        email={email}
+        password={password}
+        onVerified={handleOtpVerified}
+        onBack={() => setOtpStep(false)}
+      />
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        required
-        className={inputCls}
+        type="email" placeholder="Email" value={email}
+        onChange={e => setEmail(e.target.value)} required className={inputCls}
         autoComplete="email"
       />
       <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        required
-        className={inputCls}
+        type="password" placeholder="Password" value={password}
+        onChange={e => setPassword(e.target.value)} required className={inputCls}
         autoComplete="new-password"
       />
       <input
-        type="password"
-        placeholder="Confirm password"
-        value={confirm}
-        onChange={e => setConfirm(e.target.value)}
-        required
-        className={inputCls}
+        type="password" placeholder="Confirm password" value={confirm}
+        onChange={e => setConfirm(e.target.value)} required className={inputCls}
         autoComplete="new-password"
       />
       {error && <ErrorBox message={error} />}
       <button type="submit" disabled={loading} className={primaryBtn}>
-        {loading && (
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-          </svg>
-        )}
-        {loading ? "Creating account…" : "Create Account"}
+        {loading && <Spinner />}
+        {loading ? "Sending code…" : "Create Account"}
       </button>
     </form>
   );
@@ -288,8 +375,8 @@ function SignUpForm() {
 
 function LoginForm() {
   const [tab, setTab] = useState<"signin" | "signup">("signin");
-  const searchParams = useSearchParams();
-  const error = searchParams.get("error");
+  const searchParams  = useSearchParams();
+  const error         = searchParams.get("error");
 
   return (
     <div className="w-full max-w-sm flex flex-col items-center gap-6">
@@ -304,16 +391,14 @@ function LoginForm() {
         </div>
       </div>
 
-      {/* OAuth error from redirect */}
       {error && (
         <ErrorBox message={
-          error === "auth_failed" ? "Sign-in failed. Please try again."
+          error === "auth_failed"   ? "Sign-in failed. Please try again."
           : error === "missing_code" ? "Invalid sign-in link. Please try again."
           : "Something went wrong. Please try again."
         } />
       )}
 
-      {/* Card */}
       <div className="w-full p-6 rounded-2xl bg-[var(--surface)] border border-[var(--border)] flex flex-col gap-5">
         {/* Tab bar */}
         <div className="flex rounded-xl bg-[var(--muted)] p-1 gap-1">
@@ -332,17 +417,14 @@ function LoginForm() {
           ))}
         </div>
 
-        {/* Form */}
         {tab === "signin" ? <SignInForm /> : <SignUpForm />}
 
-        {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-[var(--border)]" />
           <span className="text-xs text-[var(--text-secondary)]">or continue with</span>
           <div className="flex-1 h-px bg-[var(--border)]" />
         </div>
 
-        {/* Google */}
         <GoogleButton />
       </div>
 

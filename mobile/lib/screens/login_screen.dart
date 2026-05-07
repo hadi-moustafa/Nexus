@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../models/user_profile.dart';
 import '../theme/app_theme.dart';
@@ -284,7 +285,7 @@ class _SignUpFormState extends State<_SignUpForm> {
   bool _obscureConfirm = true;
   bool _loading = false;
   String? _error;
-  bool _awaitingConfirmation = false;
+  bool _awaitingOtp = false;
 
   @override
   void dispose() {
@@ -298,17 +299,20 @@ class _SignUpFormState extends State<_SignUpForm> {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
     try {
-      final user = await AuthService.instance.signUpWithEmail(
-        _emailCtrl.text.trim(),
-        _passCtrl.text,
-      );
+      // 1. Check if email is already registered
+      final exists = await AuthService.instance.checkEmailExists(_emailCtrl.text.trim());
       if (!mounted) return;
-      if (user == null) {
-        // Email confirmation required
-        setState(() { _awaitingConfirmation = true; _loading = false; });
-      } else {
-        widget.onSuccess(user);
+      if (exists) {
+        setState(() {
+          _error = 'An account with this email already exists. Please sign in.';
+          _loading = false;
+        });
+        return;
       }
+      // 2. Send OTP via SMTP
+      await AuthService.instance.sendSignUpOtp(_emailCtrl.text.trim());
+      if (!mounted) return;
+      setState(() { _awaitingOtp = true; _loading = false; });
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -323,11 +327,13 @@ class _SignUpFormState extends State<_SignUpForm> {
   Widget build(BuildContext context) {
     final c = widget.colors;
 
-    if (_awaitingConfirmation) {
-      return _ConfirmationMessage(
+    if (_awaitingOtp) {
+      return _OtpInput(
         email: _emailCtrl.text.trim(),
+        password: _passCtrl.text,
         colors: c,
-        onBack: () => setState(() => _awaitingConfirmation = false),
+        onVerified: widget.onSuccess,
+        onBack: () => setState(() => _awaitingOtp = false),
       );
     }
 
@@ -683,37 +689,98 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-class _ConfirmationMessage extends StatefulWidget {
+// ── OTP Input widget ──────────────────────────────────────────────────────────
+
+class _OtpInput extends StatefulWidget {
   final String email;
+  final String password;
   final DynamicColors colors;
+  final void Function(UserProfile) onVerified;
   final VoidCallback onBack;
-  const _ConfirmationMessage({
+  const _OtpInput({
     required this.email,
+    required this.password,
     required this.colors,
+    required this.onVerified,
     required this.onBack,
   });
 
   @override
-  State<_ConfirmationMessage> createState() => _ConfirmationMessageState();
+  State<_OtpInput> createState() => _OtpInputState();
 }
 
-class _ConfirmationMessageState extends State<_ConfirmationMessage> {
+class _OtpInputState extends State<_OtpInput> {
+  final _controllers = List.generate(6, (_) => TextEditingController());
+  final _focusNodes  = List.generate(6, (_) => FocusNode());
+  bool _loading  = false;
   bool _resending = false;
-  bool _resent = false;
-  String? _resendError;
+  bool _resent   = false;
+  String? _error;
 
-  Future<void> _resend() async {
-    setState(() { _resending = true; _resendError = null; });
+  @override
+  void dispose() {
+    for (final c in _controllers) c.dispose();
+    for (final f in _focusNodes)  f.dispose();
+    super.dispose();
+  }
+
+  String get _token => _controllers.map((c) => c.text).join();
+
+  void _onDigitChanged(int idx, String value) {
+    if (value.length > 1) {
+      // Handle paste
+      final digits = value.replaceAll(RegExp(r'\D'), '');
+      if (digits.length == 6) {
+        for (int i = 0; i < 6; i++) {
+          _controllers[i].text = digits[i];
+        }
+        _submit();
+        return;
+      }
+    }
+    if (value.isNotEmpty && idx < 5) {
+      _focusNodes[idx + 1].requestFocus();
+    }
+    if (_token.length == 6) _submit();
+  }
+
+  void _onKeyEvent(int idx, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _controllers[idx].text.isEmpty &&
+        idx > 0) {
+      _focusNodes[idx - 1].requestFocus();
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_token.length < 6) return;
+    setState(() { _loading = true; _error = null; });
     try {
-      await AuthService.instance.resendConfirmationEmail(widget.email);
-      if (mounted) setState(() { _resending = false; _resent = true; });
+      final user = await AuthService.instance.verifySignUpOtp(widget.email, _token, widget.password);
+      if (mounted) widget.onVerified(user);
     } catch (_) {
       if (mounted) {
+        for (final c in _controllers) c.clear();
+        _focusNodes[0].requestFocus();
         setState(() {
-          _resending = false;
-          _resendError = 'Could not resend. Try again.';
+          _error = 'Invalid or expired code. Please try again.';
+          _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _resend() async {
+    setState(() { _resending = true; _error = null; });
+    try {
+      await AuthService.instance.sendSignUpOtp(widget.email);
+      if (mounted) setState(() { _resending = false; _resent = true; });
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _resent = false);
+      });
+    } catch (_) {
+      if (mounted) setState(() { _resending = false; _error = 'Could not resend. Try again.'; });
     }
   }
 
@@ -724,76 +791,101 @@ class _ConfirmationMessageState extends State<_ConfirmationMessage> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          width: 72,
-          height: 72,
+          width: 64,
+          height: 64,
           decoration: BoxDecoration(
             color: NexusColors.teal.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.mark_email_read_outlined,
-              color: NexusColors.teal, size: 36),
+          child: const Icon(Icons.mark_email_read_outlined, color: NexusColors.teal, size: 28),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         Text(
-          'Check your inbox',
-          style: TextStyle(
-            fontFamily: 'Fraunces',
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: c.textPrimary,
-          ),
+          'Check your email',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: c.textPrimary),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Text(
-          'We sent a confirmation link to\n${widget.email}\n\nOpen it to activate your account.',
-          style: TextStyle(fontSize: 14, color: c.textSecondary, height: 1.6),
+          'We sent a 6-digit code to\n${widget.email}',
+          style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.5),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 20),
-        if (_resent)
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_circle_outline, color: NexusColors.teal, size: 16),
-              SizedBox(width: 6),
-              Text(
-                'Email resent!',
+        const SizedBox(height: 28),
+
+        // ── 6 digit boxes
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (i) => Container(
+            width: 44,
+            height: 52,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            child: KeyboardListener(
+              focusNode: FocusNode(),
+              onKeyEvent: (e) => _onKeyEvent(i, e),
+              child: TextFormField(
+                controller: _controllers[i],
+                focusNode: _focusNodes[i],
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 1,
+                enabled: !_loading,
                 style: TextStyle(
-                  color: NexusColors.teal,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: c.textPrimary,
                 ),
+                decoration: InputDecoration(
+                  counterText: '',
+                  contentPadding: EdgeInsets.zero,
+                  filled: true,
+                  fillColor: c.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: c.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: c.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: NexusColors.teal, width: 2),
+                  ),
+                ),
+                onChanged: (v) => _onDigitChanged(i, v),
               ),
-            ],
-          )
-        else if (_resending)
-          const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(color: NexusColors.teal, strokeWidth: 2),
+            ),
+          )),
+        ),
+
+        if (_error != null) ...[
+          const SizedBox(height: 16),
+          _ErrorBox(message: _error!),
+        ],
+        if (_loading) ...[
+          const SizedBox(height: 20),
+          const CircularProgressIndicator(color: NexusColors.teal, strokeWidth: 2),
+        ],
+        const SizedBox(height: 24),
+
+        if (_resent)
+          Text(
+            'Code resent!',
+            style: const TextStyle(color: NexusColors.teal, fontWeight: FontWeight.w600, fontSize: 13),
           )
         else
           TextButton(
-            onPressed: _resend,
-            child: const Text(
-              'Resend confirmation email',
-              style: TextStyle(color: NexusColors.teal, fontWeight: FontWeight.w600),
+            onPressed: _resending ? null : _resend,
+            child: Text(
+              _resending ? 'Resending…' : 'Resend code',
+              style: const TextStyle(color: NexusColors.teal, fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ),
-        if (_resendError != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _resendError!,
-            style: TextStyle(color: Colors.red.shade400, fontSize: 13),
-            textAlign: TextAlign.center,
-          ),
-        ],
-        const SizedBox(height: 8),
         TextButton(
           onPressed: widget.onBack,
           child: Text(
-            'Back to sign up',
-            style: TextStyle(color: c.textSecondary, fontWeight: FontWeight.w500),
+            'Back',
+            style: TextStyle(color: c.textSecondary, fontSize: 13),
           ),
         ),
       ],

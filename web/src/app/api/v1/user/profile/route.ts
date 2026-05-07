@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
+import { logAction } from "@/lib/audit";
 
 /**
  * PATCH /api/v1/user/profile
@@ -31,6 +32,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error;
 
+    void logAction("profile_updated", auth.userId, { displayName }, request);
     return NextResponse.json({ data: { displayName } });
   } catch (err) {
     console.error("[PATCH /api/v1/user/profile]", err);

@@ -2,6 +2,8 @@ import { type NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getUserProfile } from "@/lib/db/users";
+import { logAction } from "@/lib/audit";
+import { trackSession } from "@/lib/db/sessions";
 
 /**
  * GET /api/v1/auth/session
@@ -92,6 +94,16 @@ export async function GET(request: NextRequest) {
       .eq("id", auth.userId)
       .single();
     const isAdmin = roleRow?.role === "admin";
+
+    // Track session; only log sign_in when it's a genuinely new session
+    // (i.e., first request from this device since last sign-out).
+    // OAuth sign-ins are already logged in /api/v1/auth/callback.
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+    const ua = request.headers.get("user-agent");
+    const { isNew } = await trackSession(auth.userId, ip, ua);
+    if (isNew && provider === "email") {
+      void logAction("sign_in", auth.userId, { method: "email" }, request);
+    }
 
     return Response.json({ data: { ...profile, provider, isAdmin } });
   } catch (err) {

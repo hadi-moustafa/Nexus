@@ -27,11 +27,14 @@
 - [x] Google OAuth sign-in (`/app/(auth)/login/page.tsx`)
 - [x] OAuth callback handler (`/api/v1/auth/callback`)
 - [x] Cookie-based session (Supabase SSR)
+- [x] Email/password sign-up with OTP email verification (`/api/v1/auth/otp` — POST with action=send|verify)
 - [x] Email/password change endpoint (`/api/v1/auth/change-password`) — email provider only
 - [x] Sign-out endpoint (`/api/v1/auth/signout`)
 - [x] Session info endpoint (`/api/v1/auth/session`)
 - [x] `requireAuth()` supporting both cookie and Bearer token
 - [x] Admin guards with role check
+- [x] Session tracking (`/api/v1/user/sessions`) — list active sessions, revoke one, revoke all
+- [x] Audit logging (`lib/audit.ts`) — tracks sign_in, sign_up, password_changed, profile_updated, bookmarks, etc.
 
 ### Feed & Articles
 - [x] Trending articles (`/api/v1/trending`, `trending-feed.tsx` server component)
@@ -50,7 +53,8 @@
 - [x] User preferences read/update (`/api/v1/user/preferences`) — topics, language, onboarding flag
 - [x] User stats (`/api/v1/user/stats`) — XP, streak, quiz count, perfect scores, articles read
 - [x] Onboarding 3-step wizard (`/app/onboarding`) — topics, language, notifications consent
-- [x] Profile page (`/app/profile`) — display name, avatar, password change, onboarding status check
+- [x] Profile page (`/app/profile`) — 5 tabs: Overview, Account, Subscription, Bookmarks, Security
+- [x] Security tab — active sessions list, per-session revoke, sign out everywhere
 
 ### Bookmarks
 - [x] Add/remove bookmarks (`POST /api/v1/user/bookmarks`)
@@ -96,6 +100,11 @@
 - [x] Admin sidebar layout with navigation
 - [x] Dashboard with stat cards + recent sign-ups (`/app/admin`)
 - [x] User management — list, update role, ban (`/app/admin/users`, `/api/v1/admin/users/[userId]`)
+- [x] User detail page — profile, active sessions, full activity log, force sign-out (`/app/admin/users/[userId]`)
+- [x] User metrics dashboard — growth charts, sign-up breakdown by provider (`/app/admin/metrics`)
+- [x] Metrics API (`/api/v1/admin/metrics`) — total/new/active users, provider split, daily sign-ups
+- [x] Admin force sign-out (`DELETE /api/v1/admin/users/[userId]/sessions`)
+- [x] Admin user activity log (`GET /api/v1/admin/users/[userId]/activity`)
 - [x] News source management — CRUD (`/app/admin/sources`)
 - [x] Flagged comments moderation — review, delete (`/app/admin/comments`)
 - [x] Journalist management — create, edit, delete (`/app/admin/journalists`)
@@ -117,8 +126,8 @@
 - [ ] **Onboarding languages** — only 3 hardcoded options (en, ar, fr). Expand or make configurable.
 
 ### Missing Features
-- [ ] **Email/password sign-up flow** — there is no registration page; only Google OAuth is available. Email provider path is only partially supported.
-- [ ] **Email verification** — no email verification workflow exists.
+- [x] **Email/password sign-up with OTP verification** — sign-up triggers Supabase email with 6-digit code; user enters it in OTP input screen before account is activated.
+- [x] **Email verification via OTP** — `POST /api/v1/auth/otp` with action=verify calls `supabase.auth.verifyOtp({ type: 'signup' })`.
 - [ ] **Avatar upload** — profile page shows avatar but no upload mechanism.
 - [ ] **Notification system** — no push/in-app notification infrastructure exists.
 - [ ] **Article read tracking** — `articlesRead` stat exists in `UserStats` but no endpoint/trigger to increment it.

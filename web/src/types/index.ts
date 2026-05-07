@@ -93,6 +93,50 @@ export interface Bookmark {
   article: Article;
 }
 
+export interface UserSession {
+  id: string;
+  deviceName: string | null;
+  browser: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastActiveAt: string;
+  isCurrent: boolean;
+}
+
+export type AuditAction =
+  | "sign_in" | "sign_up" | "sign_out"
+  | "otp_requested" | "otp_verified"
+  | "password_changed"
+  | "profile_updated" | "preferences_updated"
+  | "bookmark_added" | "bookmark_removed"
+  | "reaction_added"
+  | "quiz_submitted" | "crossword_submitted"
+  | "session_revoked" | "all_sessions_revoked"
+  | "admin_role_changed" | "admin_ban" | "admin_force_signout"
+  | "subscription_created" | "subscription_cancelled";
+
+export interface AuditEntry {
+  id: string;
+  userId: string | null;
+  action: AuditAction;
+  metadata: Record<string, unknown>;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export interface AdminUserMetrics {
+  totalUsers: number;
+  newUsersLast7Days: number;
+  newUsersLast30Days: number;
+  activeUsersLast7Days: number;
+  googleUsers: number;
+  emailUsers: number;
+  adminUsers: number;
+  bannedUsers: number;
+  signUpsByDay: Array<{ date: string; count: number }>;
+}
+
 // API response wrappers
 export interface ApiSuccess<T> {
   data: T;

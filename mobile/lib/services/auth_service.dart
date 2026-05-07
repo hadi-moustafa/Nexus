@@ -53,47 +53,48 @@ class AuthService {
 
   // ── Email / Password ──────────────────────────────────────────────────────
 
-  /// Creates a Supabase auth user. The handle_new_user DB trigger creates
-  /// rows in public.users, user_preferences, and user_stats automatically.
-  ///
-  /// Returns the UserProfile when signed in immediately (email confirmation
-  /// disabled in Supabase, which is the recommended dev setting).
-  ///
-  /// Returns null when email confirmation is required — caller should show
-  /// a "check your inbox" screen and call resendConfirmationEmail if needed.
-  Future<UserProfile?> signUpWithEmail(String email, String password) async {
-    final response = await _supabase.auth.signUp(
-      email: email,
+  /// Returns true if the email is already registered in the app.
+  Future<bool> checkEmailExists(String email) async {
+    final response = await _apiDio.post(
+      '/auth/check-email',
+      data: {'email': email.trim().toLowerCase()},
+    );
+    return (response.data['data']?['exists'] as bool?) ?? false;
+  }
+
+  /// Sends a 6-digit OTP to [email] via SMTP.
+  /// Throws DioException if the email already exists (409) or on server errors.
+  Future<void> sendSignUpOtp(String email) async {
+    await _apiDio.post(
+      '/auth/otp',
+      data: {'action': 'send', 'email': email.trim()},
+    );
+  }
+
+  /// Verifies the OTP, creates the account, and signs the user in.
+  /// Returns the UserProfile on success; throws on invalid code or server error.
+  Future<UserProfile> verifySignUpOtp(
+    String email,
+    String token,
+    String password,
+  ) async {
+    // Server creates the user and signs them in (sets web cookies).
+    // For mobile we do a Supabase sign-in so the Flutter SDK holds the session.
+    await _apiDio.post(
+      '/auth/otp',
+      data: {'action': 'verify', 'email': email.trim(), 'token': token, 'password': password},
+    );
+
+    // Now sign in via Supabase (user was created with email_confirm: true).
+    final signIn = await _supabase.auth.signInWithPassword(
+      email: email.trim(),
       password: password,
     );
 
-    // Email confirmation disabled — session issued immediately.
-    if (response.session != null) {
-      return _fetchProfileWithFallback(
-        response.session!.accessToken,
-        response.session!.user,
-      );
-    }
-
-    // Email confirmation is enabled in this Supabase project.
-    // Try signing in anyway — succeeds if the project was later reconfigured
-    // to skip confirmation, or if the user already confirmed via the link.
-    try {
-      final signIn = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      if (signIn.session != null) {
-        return _fetchProfileWithFallback(
-          signIn.session!.accessToken,
-          signIn.session!.user,
-        );
-      }
-    } on AuthException catch (_) {
-      // "Email not confirmed" or similar — fall through to show check-inbox UI.
-    }
-
-    return null;
+    return _fetchProfileWithFallback(
+      signIn.session!.accessToken,
+      signIn.session!.user,
+    );
   }
 
   /// Signs in with email + password. Throws AuthException on wrong credentials.
@@ -105,14 +106,6 @@ class AuthService {
     return _fetchProfileWithFallback(
       response.session!.accessToken,
       response.session!.user,
-    );
-  }
-
-  /// Resends the sign-up confirmation email. Safe to call multiple times.
-  Future<void> resendConfirmationEmail(String email) async {
-    await _supabase.auth.resend(
-      type: OtpType.signup,
-      email: email,
     );
   }
 

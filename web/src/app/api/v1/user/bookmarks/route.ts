@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
+import { logAction } from "@/lib/audit";
 
 /**
  * GET /api/v1/user/bookmarks
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
+    void logAction("bookmark_added", auth.userId, { articleId }, request);
     return NextResponse.json(
       { data: { id: data.id, articleId: data.article_id, createdAt: data.created_at } },
       { status: 201 }
@@ -168,6 +170,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
+    void logAction("bookmark_removed", auth.userId, { articleId }, request);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     console.error("[DELETE /api/v1/user/bookmarks]", err);

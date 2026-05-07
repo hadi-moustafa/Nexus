@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, Shield, User } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Shield, User, ChevronRight } from "lucide-react";
 import { requireAdminPage } from "@/lib/admin";
 
 interface AdminUser {
@@ -19,6 +20,7 @@ interface AdminUser {
 // search + role-toggle UX.
 
 export default function AdminUsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -133,17 +135,26 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => toggleRole(u)}
-                        disabled={updating === u.id}
-                        className="text-xs text-[var(--primary)] hover:underline disabled:opacity-50"
-                      >
-                        {updating === u.id
-                          ? "Saving…"
-                          : u.role === "admin"
-                          ? "Demote"
-                          : "Make admin"}
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => toggleRole(u)}
+                          disabled={updating === u.id}
+                          className="text-xs text-[var(--primary)] hover:underline disabled:opacity-50"
+                        >
+                          {updating === u.id
+                            ? "Saving…"
+                            : u.role === "admin"
+                            ? "Demote"
+                            : "Make admin"}
+                        </button>
+                        <button
+                          onClick={() => router.push(`/admin/users/${u.id}`)}
+                          className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                          title="View details"
+                        >
+                          <ChevronRight size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

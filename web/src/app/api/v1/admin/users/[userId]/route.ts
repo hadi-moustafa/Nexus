@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAdminApi } from "@/lib/admin";
+import { logAction } from "@/lib/audit";
 
 interface RouteContext {
   params: Promise<{ userId: string }>;
@@ -37,6 +38,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       .single();
 
     if (error) throw error;
+
+    void logAction(
+      role === "banned" ? "admin_ban" : "admin_role_changed",
+      auth.userId,
+      { targetUserId: userId, newRole: role },
+      request
+    );
 
     return NextResponse.json({ data });
   } catch (err) {

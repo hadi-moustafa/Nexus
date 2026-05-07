@@ -76,15 +76,10 @@ const createClient = (cookieStore)=>{
     });
 };
 const createPublicClient = ()=>(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(supabaseUrl, supabaseKey, {
-        global: {
-            fetch: (url, options)=>{
-                const controller = new AbortController();
-                const timer = setTimeout(()=>controller.abort(), 15000);
-                return fetch(url, {
-                    ...options,
-                    signal: controller.signal
-                }).finally(()=>clearTimeout(timer));
-            }
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
         }
     });
 const createServiceClient = ()=>(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);

@@ -34,18 +34,14 @@ export const createClient = (cookieStore: Awaited<ReturnType<typeof cookies>>) =
 
 /**
  * Cookie-free client for public reads (no auth, no lock contention).
- * Uses a 5-second fetch timeout so SSR fails fast instead of hanging 10s.
+ * Auth features are disabled to prevent session-detection network calls on init.
  */
 export const createPublicClient = () =>
   createSupabaseClient(supabaseUrl, supabaseKey, {
-    global: {
-      fetch: (url, options) => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
-        return fetch(url, { ...options, signal: controller.signal }).finally(() =>
-          clearTimeout(timer)
-        );
-      },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
     },
   });
 

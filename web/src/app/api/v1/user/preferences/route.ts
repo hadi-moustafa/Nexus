@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { getUserPreferences, updateUserPreferences } from "@/lib/db/users";
+import { logAction } from "@/lib/audit";
 
 /**
  * GET /api/v1/user/preferences
@@ -50,6 +51,7 @@ export async function PATCH(request: NextRequest) {
       patch.onboardingComplete = body.onboardingComplete;
 
     const updated = await updateUserPreferences(auth.userId, patch);
+    void logAction("preferences_updated", auth.userId, patch as Record<string, unknown>, request);
     return NextResponse.json({ data: updated });
   } catch (err) {
     console.error("[PATCH /api/v1/user/preferences]", err);

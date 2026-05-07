@@ -2,6 +2,8 @@ import { type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { requireAuth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { logAction } from "@/lib/audit";
+import { revokeAllSessions } from "@/lib/db/sessions";
 
 /**
  * POST /api/v1/auth/signout
@@ -17,6 +19,9 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
     await supabase.auth.signOut();
+
+    void logAction("sign_out", auth.userId, {}, request);
+    void revokeAllSessions(auth.userId);
 
     return Response.json({ data: { success: true } });
   } catch (err) {

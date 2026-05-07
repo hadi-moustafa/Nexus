@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
+import { logAction } from "@/lib/audit";
 
 /**
  * POST /api/v1/auth/change-password
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw error;
 
+    void logAction("password_changed", auth.userId, {}, request);
     return NextResponse.json({ data: { success: true } });
   } catch (err) {
     console.error("[POST /api/v1/auth/change-password]", err);

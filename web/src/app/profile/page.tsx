@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import {
   Flame, BookOpen, Trophy, Bookmark, LogOut, ChevronRight,
   User, Lock, CreditCard, Check, X, Loader2, AlertTriangle,
-  Zap, Eye, EyeOff,
+  Zap, Eye, EyeOff, Shield, Monitor, Smartphone, Globe,
 } from "lucide-react";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/navbar";
 import { ArticleCard } from "@/components/feed/article-card";
 import { ArticleSkeleton } from "@/components/feed/article-skeleton";
-import type { UserProfile, UserStats, Subscription, Article } from "@/types";
+import type { UserProfile, UserStats, Subscription, Article, UserSession } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,7 +61,7 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-type Tab = "overview" | "account" | "subscription" | "bookmarks";
+type Tab = "overview" | "account" | "subscription" | "bookmarks" | "security";
 
 // ---------------------------------------------------------------------------
 // Profile Page
@@ -96,6 +96,12 @@ export default function ProfilePage() {
   // ── Subscription state
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [canceling, setCanceling]         = useState(false);
+
+  // ── Security tab state
+  const [sessions, setSessions]               = useState<UserSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingAll, setRevokingAll]         = useState(false);
+  const [revokingId, setRevokingId]           = useState<string | null>(null);
 
   const showToast = useCallback((type: "success" | "error", text: string) => {
     setToast({ type, text });
@@ -138,6 +144,17 @@ export default function ProfilePage() {
       setLoadingProfile(false);
     });
   }, [router]);
+
+  // ── Load sessions when security tab activates
+  useEffect(() => {
+    if (activeTab !== "security") return;
+    setSessionsLoading(true);
+    fetch("/api/v1/user/sessions")
+      .then(r => r.json())
+      .then(({ data }) => setSessions(data ?? []))
+      .catch(console.error)
+      .finally(() => setSessionsLoading(false));
+  }, [activeTab]);
 
   // ── Load bookmarks when tab activates
   useEffect(() => {
@@ -211,6 +228,33 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRevokeSession = async (sessionId: string) => {
+    setRevokingId(sessionId);
+    try {
+      await fetch(`/api/v1/user/sessions/${sessionId}`, { method: "DELETE" });
+      setSessions(s => s.filter(x => x.id !== sessionId));
+      showToast("success", "Session revoked");
+    } catch {
+      showToast("error", "Failed to revoke session");
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    setRevokingAll(true);
+    try {
+      await fetch("/api/v1/user/sessions", { method: "DELETE" });
+      setSessions([]);
+      showToast("success", "Signed out from all devices");
+      router.replace("/login");
+    } catch {
+      showToast("error", "Failed to sign out all devices");
+    } finally {
+      setRevokingAll(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     setCanceling(true);
     try {
@@ -239,6 +283,7 @@ export default function ProfilePage() {
     { key: "account",      label: "Account",      icon: <User size={14} /> },
     { key: "subscription", label: "Subscription", icon: <CreditCard size={14} /> },
     { key: "bookmarks",    label: "Bookmarks",    icon: <Bookmark size={14} /> },
+    { key: "security",     label: "Security",     icon: <Shield size={14} /> },
   ];
 
   return (
@@ -736,6 +781,106 @@ export default function ProfilePage() {
               </div>
             )}
           </>
+        )}
+
+        {/* ── SECURITY ── */}
+        {activeTab === "security" && (
+          <div className="flex flex-col gap-5">
+
+            {/* Active sessions */}
+            <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--border)] flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--text-primary)]">Active Sessions</h2>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">Devices and browsers currently signed in</p>
+                </div>
+                <Shield size={16} className="text-[var(--text-secondary)]" />
+              </div>
+
+              {sessionsLoading ? (
+                <div className="divide-y divide-[var(--border)]">
+                  {[1, 2].map(i => (
+                    <div key={i} className="px-4 py-3 flex items-center gap-3 animate-pulse">
+                      <div className="w-8 h-8 rounded-xl bg-[var(--muted)]" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-24 rounded bg-[var(--muted)]" />
+                        <div className="h-2.5 w-40 rounded bg-[var(--muted)]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="py-8 text-center text-sm text-[var(--text-secondary)]">
+                  No active sessions found
+                </div>
+              ) : (
+                <div className="divide-y divide-[var(--border)]">
+                  {sessions.map(s => {
+                    const isAndroid  = s.deviceName === "Android";
+                    const isIOS      = s.deviceName === "iOS";
+                    const DeviceIcon = isAndroid || isIOS ? Smartphone : (s.browser === "Flutter App" ? Smartphone : Monitor);
+                    const lastSeen   = new Date(s.lastActiveAt);
+                    const daysAgo    = Math.floor((Date.now() - lastSeen.getTime()) / 86400000);
+                    const timeLabel  = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+
+                    return (
+                      <div key={s.id} className={`px-4 py-3 flex items-center gap-3 ${s.isCurrent ? "bg-[var(--primary)]/5" : ""}`}>
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${s.isCurrent ? "bg-[var(--primary)]/15" : "bg-[var(--muted)]"}`}>
+                          <DeviceIcon size={15} className={s.isCurrent ? "text-[var(--primary)]" : "text-[var(--text-secondary)]"} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                              {s.browser ?? s.deviceName ?? "Unknown device"}
+                            </p>
+                            {s.isCurrent && (
+                              <span className="text-[10px] font-bold uppercase tracking-wide bg-[var(--primary)]/15 text-[var(--primary)] px-1.5 py-0.5 rounded-full">
+                                This device
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            {[s.deviceName, s.ipAddress].filter(Boolean).join(" · ")}
+                            {s.ipAddress ? "" : ""} · Last active {timeLabel}
+                          </p>
+                        </div>
+                        {!s.isCurrent && (
+                          <button
+                            onClick={() => handleRevokeSession(s.id)}
+                            disabled={revokingId === s.id}
+                            className="shrink-0 text-xs text-red-500 hover:text-red-600 font-medium disabled:opacity-50"
+                          >
+                            {revokingId === s.id ? <Loader2 size={13} className="animate-spin" /> : "Revoke"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Sign out everywhere */}
+            <section className="rounded-2xl border border-red-400/30 bg-red-500/5 overflow-hidden">
+              <div className="px-4 py-3 border-b border-red-400/20">
+                <h2 className="text-sm font-semibold text-[var(--text-primary)]">Sign Out Everywhere</h2>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Immediately ends all active sessions across every device
+                </p>
+              </div>
+              <div className="p-4">
+                <button
+                  onClick={handleRevokeAllSessions}
+                  disabled={revokingAll}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-red-400/40 text-red-500 text-sm font-medium hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                >
+                  {revokingAll ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                  {revokingAll ? "Signing out everywhere…" : "Sign out from all devices"}
+                </button>
+              </div>
+            </section>
+
+          </div>
         )}
       </main>
     </div>

@@ -1,13 +1,39 @@
+const HEADLINES = [
+  "UN Security Council calls emergency session over regional tensions",
+  "Federal Reserve holds rates; signals two cuts before year-end",
+  "Lebanon economic recovery plan receives IMF endorsement",
+  "AI companies face new transparency rules under landmark EU Act",
+  "Global obesity rate reaches record 40% — WHO warns of health crisis",
+  "Beirut port reconstruction begins as international donors release funds",
+  "SpaceX Starship completes first commercial payload mission",
+  "Manchester City wins Premier League title for sixth consecutive season",
+];
+
 export function BreakingNewsBanner() {
+  const repeated = [...HEADLINES, ...HEADLINES];
+
   return (
-    <section className="my-6 p-4 rounded-xl border border-red-500/30 bg-red-500/10 flex items-center gap-3">
-      <div className="px-2.5 py-1 bg-red-600 rounded flex items-center gap-1.5 shadow-sm shrink-0">
-        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-        <span className="text-white text-[10px] font-bold tracking-wider leading-none">LIVE</span>
+    <div className="flex items-stretch overflow-hidden bg-[var(--surface)] border-b border-[var(--border)] h-9 select-none">
+      {/* Live badge */}
+      <div className="flex items-center gap-1.5 px-3 bg-red-600 shrink-0">
+        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+        <span className="text-white text-[10px] font-black tracking-widest leading-none uppercase">Live</span>
       </div>
-      <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-        Breaking: Major diplomatic talks underway in Geneva
-      </p>
-    </section>
+
+      {/* Divider */}
+      <div className="w-px bg-[var(--border)]" />
+
+      {/* Ticker */}
+      <div className="flex-1 overflow-hidden flex items-center">
+        <div className="ticker-track">
+          {repeated.map((headline, i) => (
+            <span key={i} className="text-[12px] font-medium text-[var(--text-secondary)] whitespace-nowrap px-6 flex items-center gap-2">
+              <span className="text-[var(--primary)] font-bold text-[10px]">●</span>
+              {headline}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

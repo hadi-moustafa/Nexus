@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { logAction } from "@/lib/audit";
+import { trackSession } from "@/lib/db/sessions";
+import { sendMail } from "@/lib/mailer";
+import { welcomeEmailHtml } from "@/lib/email-templates";
 
 /**
  * GET /api/v1/auth/callback
@@ -75,6 +79,20 @@ export async function GET(request: NextRequest) {
       .select("onboarding_complete")
       .eq("user_id", user.id)
       .single();
+
+    const isNewUser = !prefs?.onboarding_complete;
+    void logAction(isNewUser ? "sign_up" : "sign_in", user.id, { method: "google" }, request);
+    void trackSession(user.id, request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null, request.headers.get("user-agent"));
+
+    if (isNewUser && user.email) {
+      const name =
+        user.user_metadata?.full_name ?? user.user_metadata?.name ?? null;
+      void sendMail({
+        to: user.email,
+        subject: "Welcome to Nexus",
+        html: welcomeEmailHtml(name),
+      }).catch((err) => console.error("[callback] welcome email failed:", err));
+    }
 
     if (!prefs?.onboarding_complete) {
       return NextResponse.redirect(`${origin}/onboarding`);
