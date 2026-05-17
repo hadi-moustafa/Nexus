@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Shield, User, ChevronRight } from "lucide-react";
+import { Search, Shield, User, ChevronRight, PenSquare, Ban } from "lucide-react";
 import { requireAdminPage } from "@/lib/admin";
 
 interface AdminUser {
@@ -46,18 +46,15 @@ export default function AdminUsersPage() {
     loadUsers(query);
   };
 
-  const toggleRole = async (user: AdminUser) => {
-    const newRole = user.role === "admin" ? "user" : "admin";
-    setUpdating(user.id);
-    const res = await fetch(`/api/v1/admin/users/${user.id}`, {
+  const setRole = async (userId: string, role: string) => {
+    setUpdating(userId);
+    const res = await fetch(`/api/v1/admin/users/${userId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: newRole }),
+      body: JSON.stringify({ role }),
     });
     if (res.ok) {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, role: newRole } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
     }
     setUpdating(null);
   };
@@ -127,26 +124,33 @@ export default function AdminUsersPage() {
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                           u.role === "admin"
                             ? "bg-[var(--primary)]/10 text-[var(--primary)]"
+                            : u.role === "journalist"
+                            ? "bg-purple-500/10 text-purple-500"
+                            : u.role === "banned"
+                            ? "bg-red-500/10 text-red-500"
                             : "bg-[var(--muted)] text-[var(--text-secondary)]"
                         }`}
                       >
-                        {u.role === "admin" ? <Shield size={10} /> : <User size={10} />}
+                        {u.role === "admin" ? <Shield size={10} /> : u.role === "journalist" ? <PenSquare size={10} /> : u.role === "banned" ? <Ban size={10} /> : <User size={10} />}
                         {u.role}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => toggleRole(u)}
-                          disabled={updating === u.id}
-                          className="text-xs text-[var(--primary)] hover:underline disabled:opacity-50"
-                        >
-                          {updating === u.id
-                            ? "Saving…"
-                            : u.role === "admin"
-                            ? "Demote"
-                            : "Make admin"}
-                        </button>
+                        {updating === u.id ? (
+                          <span className="text-xs text-[var(--text-secondary)]">Saving…</span>
+                        ) : (
+                          <select
+                            value={u.role}
+                            onChange={(e) => setRole(u.id, e.target.value)}
+                            className="text-xs px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] cursor-pointer"
+                          >
+                            <option value="user">user</option>
+                            <option value="journalist">journalist</option>
+                            <option value="admin">admin</option>
+                            <option value="banned">banned</option>
+                          </select>
+                        )}
                         <button
                           onClick={() => router.push(`/admin/users/${u.id}`)}
                           className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"

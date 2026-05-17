@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -64,6 +65,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 export async function POST(request: NextRequest, { params }: RouteContext) {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
+
+  // 20 reaction changes per user per minute
+  const rl = rateLimit(`reaction:${auth.userId}`, 20, 60 * 1000);
+  if (!rl.ok) return rateLimitResponse(rl.resetAt) as NextResponse;
 
   try {
     const { id: articleId } = await params;

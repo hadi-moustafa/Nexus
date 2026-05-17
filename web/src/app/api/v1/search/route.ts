@@ -1,5 +1,6 @@
 import { type NextRequest } from "next/server";
 import { searchArticles } from "@/lib/db/articles";
+import { rateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 /**
  * GET /api/v1/search
@@ -14,6 +15,10 @@ import { searchArticles } from "@/lib/db/articles";
  *   language  string   optional language filter (en, fr, ar)
  */
 export async function GET(request: NextRequest) {
+  // 30 searches per IP per minute
+  const rl = rateLimit(`search:${getClientIp(request)}`, 30, 60 * 1000);
+  if (!rl.ok) return rateLimitResponse(rl.resetAt);
+
   try {
     const { searchParams } = request.nextUrl;
     const q = searchParams.get("q")?.trim();

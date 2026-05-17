@@ -91,8 +91,7 @@ export async function updateUserPreferences(
 
   const { data, error } = await supabase
     .from("user_preferences")
-    .update(dbPatch)
-    .eq("user_id", userId)
+    .upsert({ user_id: userId, ...dbPatch }, { onConflict: "user_id" })
     .select("topics, preferred_language, onboarding_complete")
     .single();
 

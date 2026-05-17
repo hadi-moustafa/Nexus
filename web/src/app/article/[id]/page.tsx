@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/navbar";
 import { ReactionsBar } from "@/components/article/reactions-bar";
 import { CommentsSection } from "@/components/article/comments-section";
+import { ArticleViewTracker } from "@/components/article/view-tracker";
 import type { Metadata } from "next";
 
 interface Props {
@@ -59,6 +60,7 @@ export default async function ArticlePage({ params }: Props) {
   return (
     <div className="min-h-screen bg-[var(--background)]">
       <Navbar />
+      {currentUserId && <ArticleViewTracker articleId={article.id} />}
 
       <main className="max-w-2xl mx-auto px-5 pb-24" dir={isRtl ? "rtl" : undefined}>
         {/* Back button */}

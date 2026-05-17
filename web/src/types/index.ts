@@ -30,6 +30,45 @@ export interface Journalist {
   bylineMatch: string | null;
   isVerified: boolean;
   followerCount: number;
+  postCount: number;
+  userId: string | null;
+  badges: JournalistBadge[];
+}
+
+export type BadgeType = 'rising_star' | 'popular' | 'gold' | 'prolific' | 'verified' | 'featured';
+
+export interface JournalistBadge {
+  id: string;
+  badgeType: BadgeType;
+  awardedAt: string;
+  awardedBy: string | null;
+}
+
+export interface JournalistPost {
+  id: string;
+  journalistId: string;
+  journalistName: string;
+  journalistAvatarUrl: string | null;
+  isVerified: boolean;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  category: string;
+  viewCount: number;
+  commentCount: number;
+  reactionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string | null;
+  body: string;
+  createdAt: string;
 }
 
 export interface UserProfile {
@@ -40,6 +79,10 @@ export interface UserProfile {
   createdAt: string;
   /** "google" | "email" — determines whether password change is available */
   provider?: string;
+  /** "user" | "journalist" | "admin" | "banned" */
+  role?: string;
+  /** Set when role === "journalist" — their journalist profile id */
+  journalistId?: string | null;
 }
 
 export interface Subscription {
@@ -113,7 +156,10 @@ export type AuditAction =
   | "quiz_submitted" | "crossword_submitted"
   | "session_revoked" | "all_sessions_revoked"
   | "admin_role_changed" | "admin_ban" | "admin_force_signout"
-  | "subscription_created" | "subscription_cancelled";
+  | "subscription_created" | "subscription_cancelled"
+  | "journalist_post_created" | "journalist_post_deleted"
+  | "admin_badge_awarded" | "admin_badge_revoked"
+  | "admin_comment_deleted" | "admin_user_banned";
 
 export interface AuditEntry {
   id: string;

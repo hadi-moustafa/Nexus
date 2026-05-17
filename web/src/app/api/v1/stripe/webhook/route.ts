@@ -3,6 +3,18 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import type Stripe from "stripe";
 
+// In-process idempotency cache — prevents duplicate processing within the same
+// serverless instance when Stripe retries a webhook. Keyed by event.id.
+const processedEvents = new Set<string>();
+// Cap size to avoid unbounded growth if the instance lives a long time
+function markProcessed(id: string) {
+  processedEvents.add(id);
+  if (processedEvents.size > 500) {
+    const [first] = processedEvents;
+    processedEvents.delete(first);
+  }
+}
+
 /**
  * POST /api/v1/stripe/webhook
  *
@@ -29,6 +41,11 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[webhook] signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  }
+
+  // Idempotency guard — Stripe retries failed webhooks multiple times
+  if (processedEvents.has(event.id)) {
+    return NextResponse.json({ received: true, skipped: "duplicate" });
   }
 
   // Webhook comes from Stripe — no user session cookies. Must use service role.
@@ -102,14 +119,24 @@ export async function POST(request: NextRequest) {
         const userId = sub.metadata?.nexus_user_id;
         if (!userId) break;
 
-        await supabase
+        // Only update if a subscription record exists — prevents creating a stale
+        // canceled row if this event arrives out of order before checkout.completed
+        const { data: existing } = await supabase
           .from("subscriptions")
-          .update({
-            status: "canceled",
-            auto_renew: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", userId);
+          .select("id")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase
+            .from("subscriptions")
+            .update({
+              status: "canceled",
+              auto_renew: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", userId);
+        }
         break;
       }
 
@@ -122,6 +149,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
 
+  markProcessed(event.id);
   return NextResponse.json({ received: true });
 }
 

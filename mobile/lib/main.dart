@@ -11,6 +11,8 @@ import 'screens/feed_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/journalist_feed_screen.dart';
+import 'screens/journalist_studio_screen.dart';
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
 import 'services/payment_callback_service.dart';
@@ -199,20 +201,50 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   int _currentIndex = 0;
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = DynamicColors(widget.isDark);
+  bool get _isJournalist => widget.currentUser?.isJournalist == true;
 
-    final screens = [
+  List<Widget> _buildScreens() {
+    final base = [
       HomeScreen(isDark: widget.isDark, onToggleTheme: widget.onToggleTheme),
       FeedScreen(isDark: widget.isDark),
+      JournalistFeedScreen(isDark: widget.isDark),
       QuizScreen(isDark: widget.isDark),
       ProfileScreen(
         isDark: widget.isDark,
+        onToggleTheme: widget.onToggleTheme,
         currentUser: widget.currentUser,
         onSignOut: widget.onSignOut,
       ),
     ];
+    if (_isJournalist) {
+      // Insert Studio before Profile
+      base.insert(base.length - 1, JournalistStudioScreen(isDark: widget.isDark));
+    }
+    return base;
+  }
+
+  List<({IconData icon, String label})> _buildTabs() {
+    final base = [
+      (icon: Icons.public,           label: 'Globe'),
+      (icon: Icons.article_outlined,  label: 'Feed'),
+      (icon: Icons.newspaper_outlined, label: 'Posts'),
+      (icon: Icons.quiz_outlined,     label: 'Quiz'),
+      (icon: Icons.person_outline,    label: 'Profile'),
+    ];
+    if (_isJournalist) {
+      base.insert(base.length - 1, (icon: Icons.edit_note_outlined, label: 'Studio'));
+    }
+    return base;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = DynamicColors(widget.isDark);
+    final screens = _buildScreens();
+    final tabs = _buildTabs();
+
+    // Clamp index in case tab count changed
+    if (_currentIndex >= screens.length) _currentIndex = 0;
 
     return Scaffold(
       body: screens[_currentIndex],
@@ -226,12 +258,12 @@ class _MainNavigatorState extends State<MainNavigator> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(icon: Icons.public,          label: 'Globe',   index: 0, colors: colors),
-                _buildNavItem(icon: Icons.article_outlined, label: 'Feed',    index: 1, colors: colors),
-                _buildNavItem(icon: Icons.quiz_outlined,    label: 'Quiz',    index: 2, colors: colors),
-                _buildNavItem(icon: Icons.person_outline,   label: 'Profile', index: 3, colors: colors),
-              ],
+              children: List.generate(tabs.length, (i) => _buildNavItem(
+                icon: tabs[i].icon,
+                label: tabs[i].label,
+                index: i,
+                colors: colors,
+              )),
             ),
           ),
         ),

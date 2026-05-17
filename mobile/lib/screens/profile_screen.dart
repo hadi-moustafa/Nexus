@@ -7,15 +7,19 @@ import '../theme/app_theme.dart';
 import '../utils/time_utils.dart';
 import 'article_screen.dart';
 import 'premium_screen.dart';
+import 'leaderboard_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final bool isDark;
+  final VoidCallback onToggleTheme;
   final UserProfile? currentUser;
   final VoidCallback? onSignOut;
 
   const ProfileScreen({
     super.key,
     required this.isDark,
+    required this.onToggleTheme,
     this.currentUser,
     this.onSignOut,
   });
@@ -94,12 +98,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               actions: [
-                if (widget.onSignOut != null)
-                  IconButton(
-                    icon: Icon(Icons.logout_outlined, color: colors.textPrimary),
-                    tooltip: 'Sign out',
-                    onPressed: widget.onSignOut,
+                IconButton(
+                  icon: Icon(Icons.leaderboard_outlined, color: colors.textPrimary),
+                  tooltip: 'Leaderboard',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LeaderboardScreen(isDark: widget.isDark),
+                    ),
                   ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.settings_outlined, color: colors.textPrimary),
+                  tooltip: 'Settings',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(
+                        isDark: widget.isDark,
+                        onToggleTheme: widget.onToggleTheme,
+                        onSignOut: widget.onSignOut ?? () {},
+                        currentUser: widget.currentUser,
+                      ),
+                    ),
+                  ),
+                ),
                 IconButton(
                   icon: Icon(Icons.workspace_premium_outlined,
                       color: _subscription?.isPremium == true

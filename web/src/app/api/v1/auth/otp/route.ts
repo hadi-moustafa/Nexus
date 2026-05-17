@@ -6,6 +6,7 @@ import { logAction } from "@/lib/audit";
 import { trackSession } from "@/lib/db/sessions";
 import { sendMail } from "@/lib/mailer";
 import { otpEmailHtml } from "@/lib/email-templates";
+import { rateLimit, getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 
 function generateOtp(): string {
   return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
@@ -46,10 +47,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ip = getClientIp(request);
     const service = createServiceClient();
 
     // ── Send ────────────────────────────────────────────────────────────────────
     if (action === "send") {
+      // 3 sends per IP per 15 minutes
+      const rl = rateLimit(`otp:send:${ip}`, 3, 15 * 60 * 1000);
+      if (!rl.ok) return rateLimitResponse(rl.resetAt) as NextResponse;
       // Guard: don't send OTP to an already-registered email
       const { data: existing } = await service
         .from("users")
@@ -110,6 +115,9 @@ export async function POST(request: NextRequest) {
 
     // ── Verify ──────────────────────────────────────────────────────────────────
     if (action === "verify") {
+      // 10 verify attempts per email per 15 minutes — prevents brute-force
+      const rl = rateLimit(`otp:verify:${email}`, 10, 15 * 60 * 1000);
+      if (!rl.ok) return rateLimitResponse(rl.resetAt) as NextResponse;
       if (!token || typeof token !== "string") {
         return NextResponse.json(
           { error: { code: "VALIDATION_ERROR", message: "token is required" } },

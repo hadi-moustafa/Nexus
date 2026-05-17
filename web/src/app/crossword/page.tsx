@@ -6,29 +6,6 @@ import { ArrowLeft, Clock, CheckCircle, Zap, Flame, Trophy, RotateCcw, HelpCircl
 import { Navbar } from "@/components/layout/navbar";
 import { Mascot, type MascotMood } from "@/components/quiz/mascot";
 
-// ─────────────────────────────────────────────────────────────
-// Puzzle definition
-// ─────────────────────────────────────────────────────────────
-/**
- * 5×5 grid — null = black square
- *
- *  O  R  B  I  T
- *  .  O  I  .  R
- *  P  U  L  S  E
- *  .  S  L  .  E
- *  N  E  X  U  S
- *
- * Across: ORBIT (1), PULSE (3), NEXUS (5)
- * Down:   ROUSE (2, col 1), BILL (4, col 2, len 4), TREES (6, col 4)
- */
-const ANSWER: (string | null)[][] = [
-  ["O", "R", "B", "I", "T"],
-  [null, "O", "I", null, "R"],
-  ["P", "U", "L", "S", "E"],
-  [null, "S", "L", null, "E"],
-  ["N", "E", "X", "U", "S"],
-];
-
 interface Clue {
   id: string;
   number: number;
@@ -39,19 +16,11 @@ interface Clue {
   clue: string;
 }
 
-const CLUES: Clue[] = [
-  { id: "1A", number: 1, direction: "across", row: 0, col: 0, length: 5, clue: "Earth's path around the sun; also a space station module (5)" },
-  { id: "3A", number: 3, direction: "across", row: 2, col: 0, length: 5, clue: "Heartbeat rhythm; a throbbing sensation of energy (5)" },
-  { id: "5A", number: 5, direction: "across", row: 4, col: 0, length: 5, clue: "Central point where things converge; this app's name! (5)" },
-  { id: "2D", number: 2, direction: "down",   row: 0, col: 1, length: 5, clue: "To awaken or stir up; anagram of EUROS (5)" },
-  { id: "4D", number: 4, direction: "down",   row: 0, col: 2, length: 4, clue: "A banknote, a statement, or a bird's beak (4)" },
-  { id: "6D", number: 6, direction: "down",   row: 0, col: 4, length: 5, clue: "Tall plants with trunks; they line boulevards (5)" },
-];
-
-// Number labels per cell (top-left corner)
-const CELL_NUMBERS: Record<string, number> = {
-  "0-0": 1, "0-1": 2, "0-2": 4, "0-4": 6, "2-0": 3, "4-0": 5,
-};
+interface Puzzle {
+  answer: (string | null)[][];
+  clues: Clue[];
+  cellNumbers: Record<string, number>;
+}
 
 function clueCells(cl: Clue): [number, number][] {
   return Array.from({ length: cl.length }, (_, i) =>
@@ -66,12 +35,13 @@ export default function CrosswordPage() {
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("loading");
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [userGrid, setUserGrid] = useState<string[][]>(() =>
     Array.from({ length: GRID_SIZE }, () => new Array(GRID_SIZE).fill(""))
   );
   const [selectedCell, setSelectedCell] = useState<[number, number]>([0, 0]);
   const [direction, setDirection] = useState<"across" | "down">("across");
-  const [activeClue, setActiveClue] = useState<Clue>(CLUES[0]);
+  const [activeClue, setActiveClue] = useState<Clue | null>(null);
   const [incorrectCells, setIncorrectCells] = useState<Set<string>>(new Set());
   const [revealedCells, setRevealedCells] = useState<Set<string>>(new Set());
   const [seconds, setSeconds] = useState(0);
@@ -84,15 +54,19 @@ export default function CrosswordPage() {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const hasSubmitted = useRef(false);
 
-  // ── Check completion status ──
+  // ── Load puzzle + check completion status ──
   useEffect(() => {
     fetch("/api/v1/crossword")
       .then((r) => r.json())
       .then(({ data }) => {
+        if (data?.puzzle) setPuzzle(data.puzzle);
         if (data?.alreadyCompleted) {
           setPrevResult({ xpEarned: data.xpEarned, timeSeconds: data.timeSeconds });
           setPhase("already-done");
         } else {
+          if (data?.puzzle?.clues?.length) {
+            setActiveClue(data.puzzle.clues[0]);
+          }
           setPhase("playing");
         }
       })
@@ -110,14 +84,14 @@ export default function CrosswordPage() {
 
   // ── Clue lookup ──
   const getClueForCell = useCallback((r: number, c: number, dir: "across" | "down"): Clue | null =>
-    CLUES.find((cl) => {
+    (puzzle?.clues ?? []).find((cl) => {
       if (cl.direction !== dir) return false;
       return clueCells(cl).some(([cr, cc]) => cr === r && cc === c);
     }) ?? null,
-  []);
+  [puzzle]);
 
   const selectCell = useCallback((r: number, c: number, preferDir?: "across" | "down") => {
-    if (ANSWER[r][c] === null) return;
+    if (!puzzle || puzzle.answer[r]?.[c] === null) return;
     const [pr, pc] = selectedCell;
     const newDir = preferDir ?? (pr === r && pc === c ? (direction === "across" ? "down" : "across") : direction);
     const clue = getClueForCell(r, c, newDir) ?? getClueForCell(r, c, newDir === "across" ? "down" : "across");
@@ -129,6 +103,7 @@ export default function CrosswordPage() {
 
   // ── Advance cursor ──
   const advance = useCallback((r: number, c: number, forward: boolean) => {
+    if (!activeClue) return;
     const cells = clueCells(activeClue);
     const idx = cells.findIndex(([cr, cc]) => cr === r && cc === c);
     const nextIdx = forward ? idx + 1 : idx - 1;
@@ -141,14 +116,15 @@ export default function CrosswordPage() {
 
   // ── Check if puzzle is solved ──
   const checkSolved = useCallback((grid: string[][]): boolean => {
+    if (!puzzle) return false;
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
-        if (ANSWER[r][c] === null) continue;
-        if (grid[r][c] !== ANSWER[r][c]) return false;
+        if (puzzle.answer[r][c] === null) continue;
+        if (grid[r][c] !== puzzle.answer[r][c]) return false;
       }
     }
     return true;
-  }, []);
+  }, [puzzle]);
 
   // ── Submit completion ──
   const submitCompletion = useCallback(async (time: number) => {
@@ -211,25 +187,27 @@ export default function CrosswordPage() {
 
   // ── Check cells (highlight mistakes) ──
   const handleCheck = useCallback(() => {
+    if (!puzzle) return;
     const wrong = new Set<string>();
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
-        if (ANSWER[r][c] === null || !userGrid[r][c]) continue;
-        if (userGrid[r][c] !== ANSWER[r][c]) wrong.add(`${r}-${c}`);
+        if (puzzle.answer[r][c] === null || !userGrid[r][c]) continue;
+        if (userGrid[r][c] !== puzzle.answer[r][c]) wrong.add(`${r}-${c}`);
       }
     }
     setIncorrectCells(wrong);
     if (wrong.size === 0) { setMascotMood("happy"); setMascotMsg("All correct so far! Keep going!"); }
     else { setMascotMood("sad"); setMascotMsg(`${wrong.size} mistake${wrong.size > 1 ? "s" : ""} — shown in red.`); }
-  }, [userGrid]);
+  }, [puzzle, userGrid]);
 
   // ── Reveal current word ──
   const handleRevealWord = useCallback(() => {
+    if (!puzzle || !activeClue) return;
     const cells = clueCells(activeClue);
     const newGrid = userGrid.map((row) => [...row]);
     const newRevealed = new Set(revealedCells);
     for (const [r, c] of cells) {
-      newGrid[r][c] = ANSWER[r][c] ?? "";
+      newGrid[r][c] = puzzle.answer[r][c] ?? "";
       newRevealed.add(`${r}-${c}`);
     }
     setUserGrid(newGrid);
@@ -249,11 +227,11 @@ export default function CrosswordPage() {
 
   // ── Cell style ──
   const getCellBg = (r: number, c: number): string => {
-    if (ANSWER[r][c] === null) return "bg-[var(--text-primary)]";
+    if (!puzzle || puzzle.answer[r]?.[c] === null) return "bg-[var(--text-primary)]";
     const key = `${r}-${c}`;
     const [sr, sc] = selectedCell;
     const isSelected = sr === r && sc === c;
-    const isInWord = clueCells(activeClue).some(([cr, cc]) => cr === r && cc === c);
+    const isInWord = activeClue ? clueCells(activeClue).some(([cr, cc]) => cr === r && cc === c) : false;
     if (incorrectCells.has(key)) return "bg-red-100 border-red-400 dark:bg-red-900/30 dark:border-red-500";
     if (isSelected) return "bg-[var(--primary)] border-[var(--primary)]";
     if (isInWord) return "bg-[var(--primary)]/15 border-[var(--primary)]/40";
@@ -343,7 +321,7 @@ export default function CrosswordPage() {
           {/* Solved grid */}
           <div className="flex justify-center mb-8">
             <div className="inline-grid gap-1" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 2.5rem)` }}>
-              {ANSWER.map((row, r) =>
+              {(puzzle?.answer ?? []).map((row, r) =>
                 row.map((letter, c) => (
                   <div key={`${r}-${c}`}
                     className={`w-10 h-10 flex items-center justify-center text-sm font-bold rounded ${
@@ -376,6 +354,15 @@ export default function CrosswordPage() {
   // ─────────────────────────────────────────────────────────────
   // PLAYING
   // ─────────────────────────────────────────────────────────────
+  if (!puzzle || !activeClue) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex flex-col items-center justify-center gap-4">
+        <Mascot mood="thinking" size={90} />
+        <p className="text-sm text-[var(--text-secondary)] animate-pulse">Loading puzzle…</p>
+      </div>
+    );
+  }
+
   const [selR, selC] = selectedCell;
 
   return (
@@ -420,11 +407,11 @@ export default function CrosswordPage() {
         {/* Grid */}
         <div className="flex justify-center mb-5">
           <div className="inline-grid gap-1" style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)` }}>
-            {ANSWER.map((row, r) =>
+            {puzzle.answer.map((row, r) =>
               row.map((letter, c) => {
                 const key = `${r}-${c}`;
                 const isBlack = letter === null;
-                const cellNum = CELL_NUMBERS[key];
+                const cellNum = puzzle.cellNumbers[key];
                 const [sr2, sc2] = selectedCell;
                 const isSelected = sr2 === r && sc2 === c;
                 const isInWord = clueCells(activeClue).some(([cr, cc]) => cr === r && cc === c);
@@ -504,7 +491,7 @@ export default function CrosswordPage() {
           <div className="grid grid-cols-2 gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2">Across</p>
-              {CLUES.filter((cl) => cl.direction === "across").map((cl) => (
+              {puzzle.clues.filter((cl) => cl.direction === "across").map((cl) => (
                 <button key={cl.id}
                   onClick={() => { setActiveClue(cl); setDirection("across"); const [cr, cc] = clueCells(cl)[0]; selectCell(cr, cc, "across"); }}
                   className={`block w-full text-left text-xs leading-snug py-1.5 px-2 rounded-lg mb-1 transition-colors ${
@@ -516,7 +503,7 @@ export default function CrosswordPage() {
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] mb-2">Down</p>
-              {CLUES.filter((cl) => cl.direction === "down").map((cl) => (
+              {puzzle.clues.filter((cl) => cl.direction === "down").map((cl) => (
                 <button key={cl.id}
                   onClick={() => { setActiveClue(cl); setDirection("down"); const [cr, cc] = clueCells(cl)[0]; selectCell(cr, cc, "down"); }}
                   className={`block w-full text-left text-xs leading-snug py-1.5 px-2 rounded-lg mb-1 transition-colors ${

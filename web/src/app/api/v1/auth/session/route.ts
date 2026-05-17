@@ -84,6 +84,8 @@ export async function GET(request: NextRequest) {
           createdAt: new Date().toISOString(),
           provider,
           isAdmin: false,
+          role: "user",
+          journalistId: null,
         },
       });
     }
@@ -93,7 +95,19 @@ export async function GET(request: NextRequest) {
       .select("role")
       .eq("id", auth.userId)
       .single();
-    const isAdmin = roleRow?.role === "admin";
+    const role = (roleRow?.role as string) ?? "user";
+    const isAdmin = role === "admin";
+
+    // If journalist, fetch their profile id
+    let journalistId: string | null = null;
+    if (role === "journalist") {
+      const { data: jRow } = await supabase
+        .from("journalists")
+        .select("id")
+        .eq("user_id", auth.userId)
+        .maybeSingle();
+      journalistId = jRow?.id ?? null;
+    }
 
     // Track session; only log sign_in when it's a genuinely new session
     // (i.e., first request from this device since last sign-out).
@@ -105,7 +119,7 @@ export async function GET(request: NextRequest) {
       void logAction("sign_in", auth.userId, { method: "email" }, request);
     }
 
-    return Response.json({ data: { ...profile, provider, isAdmin } });
+    return Response.json({ data: { ...profile, provider, isAdmin, role, journalistId } });
   } catch (err) {
     console.error("[GET /api/v1/auth/session]", err);
     return Response.json(

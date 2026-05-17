@@ -96,21 +96,24 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       isFollowing = !!follow;
     }
 
-    return NextResponse.json({
-      data: {
-        journalist: {
-          id: journalist.id as string,
-          name: journalist.name as string,
-          bio: (journalist.bio as string | null) ?? null,
-          avatarUrl: (journalist.avatar_url as string | null) ?? null,
-          isVerified: (journalist.is_verified as boolean),
-          followerCount: (journalist.follower_count as number),
+    return NextResponse.json(
+      {
+        data: {
+          journalist: {
+            id: journalist.id as string,
+            name: journalist.name as string,
+            bio: (journalist.bio as string | null) ?? null,
+            avatarUrl: (journalist.avatar_url as string | null) ?? null,
+            isVerified: (journalist.is_verified as boolean),
+            followerCount: (journalist.follower_count as number),
+          },
+          isFollowing,
+          articles,
+          nextCursor,
         },
-        isFollowing,
-        articles,
-        nextCursor,
       },
-    });
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900" } }
+    );
   } catch (err) {
     console.error("[GET /api/v1/journalists/[id]]", err);
     return NextResponse.json(

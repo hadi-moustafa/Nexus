@@ -6,6 +6,8 @@ class UserProfile {
   final String? displayName;
   final String? avatarUrl;
   final String createdAt;
+  final String role;
+  final String? journalistId;
 
   const UserProfile({
     required this.id,
@@ -13,6 +15,8 @@ class UserProfile {
     this.displayName,
     this.avatarUrl,
     required this.createdAt,
+    this.role = 'user',
+    this.journalistId,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -22,8 +26,14 @@ class UserProfile {
       displayName: json['displayName'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
       createdAt: json['createdAt'] as String,
+      role: json['role'] as String? ?? 'user',
+      journalistId: json['journalistId'] as String?,
     );
   }
+
+  bool get isJournalist => role == 'journalist';
+  bool get isAdmin => role == 'admin';
+  bool get isBanned => role == 'banned';
 
   /// Returns the best available display name, falling back to email prefix.
   String get name => displayName ?? email.split('@').first;

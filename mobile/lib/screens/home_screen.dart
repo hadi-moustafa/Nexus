@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
 import '../models/article.dart';
 import '../services/articles_service.dart';
+import '../services/api_client.dart';
 import '../utils/time_utils.dart';
 import 'article_screen.dart';
 import 'country_panel.dart';
@@ -21,37 +22,77 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+class _RegionData {
+  final String slug;
+  final String name;
+  final int articleCount;
+  _RegionData({required this.slug, required this.name, required this.articleCount});
+  factory _RegionData.fromJson(Map<String, dynamic> j) => _RegionData(
+        slug: j['slug'] as String,
+        name: j['name'] as String,
+        articleCount: j['articleCount'] as int? ?? 0,
+      );
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   bool _showCountryPanel = false;
   String _selectedCountry = '';
 
   List<Article> _trendingArticles = [];
+  List<String> _breakingTitles = [];
+  List<_RegionData> _regions = [];
   bool _isLoading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
     _loadTrending();
+    _loadBreaking();
+    _loadRegions();
   }
 
   Future<void> _loadTrending() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    setState(() { _isLoading = true; _error = null; });
     try {
       final articles = await ArticlesService.instance.fetchTrending(limit: 5);
-      setState(() {
-        _trendingArticles = articles;
-        _isLoading = false;
-      });
+      if (mounted) setState(() { _trendingArticles = articles; _isLoading = false; });
     } catch (_) {
-      setState(() {
-        _error = 'Could not load articles';
-        _isLoading = false;
-      });
+      if (mounted) setState(() { _error = 'Could not load articles'; _isLoading = false; });
     }
+  }
+
+  Future<void> _loadBreaking() async {
+    try {
+      final response = await ApiClient.instance.get('/feed/breaking', queryParameters: {'limit': 5});
+      final data = response.data['data'] as List<dynamic>;
+      if (mounted) {
+        setState(() {
+          _breakingTitles = data
+              .map((e) => (e as Map<String, dynamic>)['title'] as String? ?? '')
+              .where((t) => t.isNotEmpty)
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadRegions() async {
+    try {
+      final response = await ApiClient.instance.get('/regions');
+      final data = response.data['data'] as List<dynamic>;
+      if (mounted) {
+        setState(() {
+          _regions = data
+              .map((e) => _RegionData.fromJson(e as Map<String, dynamic>))
+              .toList();
+        });
+      }
+    } catch (_) {}
   }
 
   void _onCountryTap(String country) {
@@ -129,9 +170,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               // Breaking News Banner
-              SliverToBoxAdapter(
-                child: _BreakingNewsBanner(isDark: widget.isDark),
-              ),
+              if (_breakingTitles.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _BreakingNewsBanner(
+                    isDark: widget.isDark,
+                    titles: _breakingTitles,
+                  ),
+                ),
 
               // Interactive Map Section
               SliverToBoxAdapter(
@@ -162,6 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _InteractiveMap(
                         isDark: widget.isDark,
                         onCountryTap: _onCountryTap,
+                        regions: _regions,
                       ),
                     ],
                   ),
@@ -307,79 +353,135 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _BreakingNewsBanner extends StatelessWidget {
+class _BreakingNewsBanner extends StatefulWidget {
   final bool isDark;
+  final List<String> titles;
 
-  const _BreakingNewsBanner({required this.isDark});
+  const _BreakingNewsBanner({required this.isDark, required this.titles});
+
+  @override
+  State<_BreakingNewsBanner> createState() => _BreakingNewsBannerState();
+}
+
+class _BreakingNewsBannerState extends State<_BreakingNewsBanner> {
+  int _index = 0;
+
+  void _next() {
+    if (widget.titles.isEmpty) return;
+    setState(() => _index = (_index + 1) % widget.titles.length);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.red,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.bolt, color: Colors.white, size: 14),
-                SizedBox(width: 4),
-                Text(
-                  'LIVE',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Breaking: Major diplomatic talks underway in Geneva',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: isDark 
-                    ? NexusColors.darkTextPrimary 
-                    : NexusColors.lightTextPrimary,
+    final title = widget.titles.isNotEmpty ? widget.titles[_index] : '';
+    return GestureDetector(
+      onTap: _next,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(4),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bolt, color: Colors.white, size: 14),
+                  SizedBox(width: 4),
+                  Text('LIVE',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5)),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: widget.isDark
+                      ? NexusColors.darkTextPrimary
+                      : NexusColors.lightTextPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (widget.titles.length > 1)
+              Icon(Icons.chevron_right,
+                  size: 16,
+                  color: widget.isDark
+                      ? NexusColors.darkTextSecondary
+                      : NexusColors.lightTextSecondary),
+          ],
+        ),
       ),
     );
   }
 }
 
+// Pixel positions on the 360-wide map container for each region slug
+const _regionPositions = {
+  'europe':      {'left': 60.0,  'top': 70.0},
+  'asia':        {'left': 200.0, 'top': 90.0},
+  'africa':      {'left': 100.0, 'top': 140.0},
+  'americas':    {'left': 280.0, 'top': 60.0},
+  'middle-east': {'left': 155.0, 'top': 115.0},
+  'oceania':     {'left': 255.0, 'top': 155.0},
+};
+
 class _InteractiveMap extends StatelessWidget {
   final bool isDark;
   final Function(String) onCountryTap;
+  final List<_RegionData> regions;
 
   const _InteractiveMap({
     required this.isDark,
     required this.onCountryTap,
+    required this.regions,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = DynamicColors(isDark);
+
+    // Build a lookup map slug → count from loaded regions
+    final countBySlug = {for (final r in regions) r.slug: r.articleCount};
+
+    // Default positions for the hotspots
+    final hotspots = _regionPositions.entries
+        .where((e) => (countBySlug[e.key] ?? 0) > 0 || regions.isEmpty)
+        .map((e) {
+      final regionName = regions.firstWhere(
+        (r) => r.slug == e.key,
+        orElse: () => _RegionData(
+          slug: e.key,
+          name: e.key[0].toUpperCase() + e.key.substring(1),
+          articleCount: 0,
+        ),
+      );
+      return (
+        slug: e.key,
+        name: regionName.name,
+        count: countBySlug[e.key] ?? 0,
+        left: e.value['left']!,
+        top: e.value['top']!,
+      );
+    }).toList();
 
     return Container(
       height: 220,
@@ -390,7 +492,6 @@ class _InteractiveMap extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Map Background
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: Container(
@@ -399,58 +500,26 @@ class _InteractiveMap extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: isDark
-                      ? [
-                          const Color(0xFF1E1F24),
-                          const Color(0xFF141519),
-                        ]
-                      : [
-                          const Color(0xFFE8E6E1),
-                          const Color(0xFFF7F5F0),
-                        ],
+                      ? [const Color(0xFF1E1F24), const Color(0xFF141519)]
+                      : [const Color(0xFFE8E6E1), const Color(0xFFF7F5F0)],
                 ),
               ),
               child: Center(
-                child: Icon(
-                  Icons.public,
-                  size: 120,
-                  color: NexusColors.teal.withOpacity(0.2),
-                ),
+                child: Icon(Icons.public, size: 120,
+                    color: NexusColors.teal.withOpacity(0.2)),
               ),
             ),
           ),
-          // Hotspot Markers
-          _MapHotspot(
-            left: 60,
-            top: 70,
-            label: 'Europe',
-            count: 24,
-            isDark: isDark,
-            onTap: () => onCountryTap('Europe'),
-          ),
-          _MapHotspot(
-            left: 200,
-            top: 90,
-            label: 'Asia',
-            count: 18,
-            isDark: isDark,
-            onTap: () => onCountryTap('Asia'),
-          ),
-          _MapHotspot(
-            left: 100,
-            top: 140,
-            label: 'Africa',
-            count: 12,
-            isDark: isDark,
-            onTap: () => onCountryTap('Africa'),
-          ),
-          _MapHotspot(
-            left: 280,
-            top: 60,
-            label: 'Americas',
-            count: 31,
-            isDark: isDark,
-            onTap: () => onCountryTap('Americas'),
-          ),
+          // Show hotspots only for regions with articles (or all if no data loaded yet)
+          for (final h in hotspots)
+            _MapHotspot(
+              left: h.left,
+              top: h.top,
+              label: h.name,
+              count: h.count,
+              isDark: isDark,
+              onTap: () => onCountryTap(h.name),
+            ),
         ],
       ),
     );

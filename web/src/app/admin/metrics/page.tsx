@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, TrendingUp, UserCheck, Shield, Mail, Chrome } from "lucide-react";
+import { Users, TrendingUp, UserCheck, Shield, Mail, Globe } from "lucide-react";
 import type { AdminUserMetrics } from "@/types";
 
 function StatCard({
@@ -90,7 +90,7 @@ export default function AdminMetricsPage() {
         <StatCard label="New (last 7 days)"    value={metrics.newUsersLast7Days}   icon={TrendingUp} color="text-green-500" />
         <StatCard label="New (last 30 days)"   value={metrics.newUsersLast30Days}  icon={TrendingUp} color="text-teal-500" />
         <StatCard label="Active (last 7 days)" value={metrics.activeUsersLast7Days} icon={UserCheck} color="text-purple-500" sub="Sign-ins tracked" />
-        <StatCard label="Google sign-ups"      value={metrics.googleUsers}         icon={Chrome}     color="text-orange-500" />
+        <StatCard label="Google sign-ups"      value={metrics.googleUsers}         icon={Globe}      color="text-orange-500" />
         <StatCard label="Email sign-ups"       value={metrics.emailUsers}          icon={Mail}       color="text-sky-500" />
         <StatCard label="Admin accounts"       value={metrics.adminUsers}          icon={Shield}     color="text-[var(--primary)]" />
         <StatCard label="Banned users"         value={metrics.bannedUsers}         icon={Users}      color="text-red-500" />

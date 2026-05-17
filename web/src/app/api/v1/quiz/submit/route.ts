@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const XP_PER_CORRECT = 10;
 const PERFECT_BONUS = 20;
@@ -22,6 +23,10 @@ const STREAK_BONUS = 5; // per streak day, capped at 50
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth instanceof NextResponse) return auth;
+
+  // 5 submissions per user per hour (DB unique constraint also enforces one per quiz)
+  const rl = rateLimit(`quiz:submit:${auth.userId}`, 5, 60 * 60 * 1000);
+  if (!rl.ok) return rateLimitResponse(rl.resetAt) as NextResponse;
 
   try {
     const { quizId, answers } = await request.json();

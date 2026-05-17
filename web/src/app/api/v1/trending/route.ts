@@ -9,7 +9,10 @@ export async function GET(request: NextRequest) {
 
     const { articles, nextCursor } = await getTrendingArticles({ limit, cursor });
 
-    return Response.json({ data: articles, meta: { nextCursor } });
+    return Response.json(
+      { data: articles, meta: { nextCursor } },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+    );
   } catch (err) {
     console.error("[GET /api/v1/trending]", err);
     return Response.json(

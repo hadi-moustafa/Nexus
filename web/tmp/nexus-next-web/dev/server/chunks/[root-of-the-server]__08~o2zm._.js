@@ -218,7 +218,12 @@ async function updateUserPreferences(userId, patch) {
     if (patch.preferredLanguage !== undefined) dbPatch.preferred_language = patch.preferredLanguage;
     if (patch.onboardingComplete !== undefined) dbPatch.onboarding_complete = patch.onboardingComplete;
     dbPatch.updated_at = new Date().toISOString();
-    const { data, error } = await supabase.from("user_preferences").update(dbPatch).eq("user_id", userId).select("topics, preferred_language, onboarding_complete").single();
+    const { data, error } = await supabase.from("user_preferences").upsert({
+        user_id: userId,
+        ...dbPatch
+    }, {
+        onConflict: "user_id"
+    }).select("topics, preferred_language, onboarding_complete").single();
     if (error) throw error;
     return rowToPreferences(data);
 }

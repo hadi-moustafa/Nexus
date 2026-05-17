@@ -21,9 +21,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const { userId } = await params;
     const { role } = await request.json();
 
-    if (!["user", "admin"].includes(role)) {
+    if (!["user", "admin", "journalist", "banned"].includes(role)) {
       return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "role must be 'user' or 'admin'" } },
+        { error: { code: "VALIDATION_ERROR", message: "role must be 'user', 'admin', 'journalist', or 'banned'" } },
         { status: 400 }
       );
     }
@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (error) throw error;
 
     void logAction(
-      role === "banned" ? "admin_ban" : "admin_role_changed",
+      role === "banned" ? "admin_user_banned" : "admin_role_changed",
       auth.userId,
       { targetUserId: userId, newRole: role },
       request

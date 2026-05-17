@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
       rank: r.rank as number,
     }));
 
-    return NextResponse.json({ data: entries, meta: { myRank } });
+    return NextResponse.json(
+      { data: entries, meta: { myRank } },
+      { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" } }
+    );
   } catch (err) {
     console.error("[GET /api/v1/leaderboard]", err);
     return NextResponse.json(
