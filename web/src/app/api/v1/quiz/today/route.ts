@@ -4,19 +4,20 @@ import { createServiceClient } from "@/lib/supabase/server";
 /**
  * GET /api/v1/quiz/today
  *
- * Returns today's published quiz with its questions (options only, no correct_index).
- * Also returns whether the current user has already completed it.
+ * Picks today's quiz from the pool by rotating through all published quizzes
+ * using (days since epoch % pool size). The same quiz repeats on the same
+ * calendar day worldwide.
  *
  * Auth optional — anonymous users get the quiz but cannot submit.
+ * alreadyCompleted is true if the authenticated user already submitted
+ * a quiz today (any quiz).
  */
 export async function GET(_request: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-
-    // Fetch today's quiz + questions
-    const { data: quiz, error } = await supabase
+    // Fetch all published quizzes ordered by creation date (stable pool order)
+    const { data: pool, error: poolErr } = await supabase
       .from("quizzes")
       .select(`
         id, title, xp_reward, scheduled_for,
@@ -24,35 +25,39 @@ export async function GET(_request: NextRequest) {
           id, question, options, time_limit, position, explanation
         )
       `)
-      .eq("scheduled_for", today)
       .eq("is_published", true)
-      .order("position", { referencedTable: "quiz_questions", ascending: true })
-      .single();
+      .order("quiz_date", { ascending: true });
 
-    if (error && error.code !== "PGRST116") throw error;
+    if (poolErr) throw poolErr;
 
-    if (!quiz) {
+    if (!pool || pool.length === 0) {
       return NextResponse.json(
-        { error: { code: "NOT_FOUND", message: "No quiz available for today" } },
+        { error: { code: "NOT_FOUND", message: "No quizzes available" } },
         { status: 404 }
       );
     }
 
-    // Check if current user already completed it
+    // Pick today's quiz: (days since Unix epoch) % pool size
+    const today = new Date().toISOString().slice(0, 10);
+    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    const quiz = pool[daysSinceEpoch % pool.length];
+
+    // Check if current user already completed a quiz today
     let alreadyCompleted = false;
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { data: result } = await supabase
         .from("quiz_results")
-        .select("id, score, xp_earned")
-        .eq("quiz_id", quiz.id)
+        .select("id")
         .eq("user_id", user.id)
-        .single();
+        .gte("completed_at", `${today}T00:00:00.000Z`)
+        .lt("completed_at", `${today}T23:59:59.999Z`)
+        .maybeSingle();
 
       if (result) alreadyCompleted = true;
     }
 
-    // Strip correct_index from questions before sending to client
+    // Strip correct_index before sending to client
     const questions = (quiz.quiz_questions as unknown as Array<{
       id: string;
       question: string;
@@ -60,20 +65,22 @@ export async function GET(_request: NextRequest) {
       time_limit: number;
       position: number;
       explanation: string | null;
-    }>).map(({ id, question, options, time_limit, position }) => ({
-      id,
-      question,
-      options,
-      timeLimit: time_limit,
-      position,
-    }));
+    }>)
+      .sort((a, b) => a.position - b.position)
+      .map(({ id, question, options, time_limit, position }) => ({
+        id,
+        question,
+        options,
+        timeLimit: time_limit,
+        position,
+      }));
 
     return NextResponse.json({
       data: {
         id: quiz.id,
         title: quiz.title ?? "Daily News Quiz",
         xpReward: quiz.xp_reward,
-        scheduledFor: quiz.scheduled_for,
+        scheduledFor: today,
         questions,
         alreadyCompleted,
       },

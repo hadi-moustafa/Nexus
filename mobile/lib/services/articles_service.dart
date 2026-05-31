@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import '../models/article.dart';
 import 'api_client.dart';
+
+const _tag = '[ArticlesService]';
 
 class ArticlesService {
   ArticlesService._();
@@ -25,17 +28,24 @@ class ArticlesService {
     if (cursor != null) params['cursor'] = cursor;
     if (category != null && category.isNotEmpty) params['category'] = category;
     if (language != null && language.isNotEmpty) params['language'] = language;
+    debugPrint('$_tag fetchFeed params=$params');
 
     final response =
         await ApiClient.instance.get('/feed', queryParameters: params);
-    return _parsePage(response.data);
+    debugPrint('$_tag fetchFeed raw keys=${response.data.keys.toList()}');
+    final result = _parsePage(response.data);
+    debugPrint('$_tag fetchFeed → ${result.articles.length} articles, nextCursor=${result.nextCursor}');
+    return result;
   }
 
   /// Trending articles for the home screen.
   Future<List<Article>> fetchTrending({int limit = 10}) async {
+    debugPrint('$_tag fetchTrending limit=$limit');
     final response = await ApiClient.instance
         .get('/trending', queryParameters: {'limit': limit});
+    debugPrint('$_tag fetchTrending raw keys=${response.data.keys.toList()}');
     final data = response.data['data'] as List<dynamic>;
+    debugPrint('$_tag fetchTrending → ${data.length} articles');
     return data
         .map((json) => Article.fromJson(json as Map<String, dynamic>))
         .toList();
@@ -81,13 +91,23 @@ class ArticlesService {
 
   ({List<Article> articles, String? nextCursor}) _parsePage(
       Map<String, dynamic> body) {
-    final data = body['data'] as List<dynamic>;
+    debugPrint('$_tag _parsePage body keys=${body.keys.toList()}');
+    final rawData = body['data'];
+    if (rawData == null) {
+      debugPrint('$_tag _parsePage ERROR: "data" key is null — full body: $body');
+      return (articles: [], nextCursor: null);
+    }
+    final data = rawData as List<dynamic>;
     final meta = body['meta'] as Map<String, dynamic>?;
-    return (
-      articles: data
-          .map((json) => Article.fromJson(json as Map<String, dynamic>))
-          .toList(),
-      nextCursor: meta?['nextCursor'] as String?,
-    );
+    debugPrint('$_tag _parsePage ${data.length} items, meta=$meta');
+    final articles = <Article>[];
+    for (var i = 0; i < data.length; i++) {
+      try {
+        articles.add(Article.fromJson(data[i] as Map<String, dynamic>));
+      } catch (e, st) {
+        debugPrint('$_tag _parsePage ERROR parsing item $i: $e\n$st\nraw: ${data[i]}');
+      }
+    }
+    return (articles: articles, nextCursor: meta?['nextCursor'] as String?);
   }
 }

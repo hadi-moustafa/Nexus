@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Trophy, Sparkles, BarChart2, PuzzleIcon } from "lucide-react";
+import { Trophy, BarChart2, PuzzleIcon, Newspaper } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { BreakingNewsBanner } from "@/components/feed/breaking-news-banner";
 import { TrendingFeed } from "@/components/feed/trending-feed";
@@ -20,7 +20,7 @@ const CATEGORIES = [
 const EXPLORE = [
   { href: "/quiz",        icon: Trophy,      label: "Daily Quiz",  sub: "Test your news IQ",    color: "text-amber-500" },
   { href: "/leaderboard", icon: BarChart2,   label: "Leaderboard", sub: "See top readers",       color: "text-blue-500"  },
-  { href: "/digest",      icon: Sparkles,    label: "AI Digest",   sub: "Premium recap",         color: "text-violet-500"},
+  { href: "/feed?lang=ar",icon: Newspaper,   label: "العربية",     sub: "Arabic feed",           color: "text-violet-500"},
   { href: "/crossword",   icon: PuzzleIcon,  label: "Crossword",   sub: "Daily puzzle",          color: "text-green-500" },
 ];
 

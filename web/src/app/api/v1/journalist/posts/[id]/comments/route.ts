@@ -20,9 +20,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const supabase = createServiceClient();
 
+    // author_id references auth.users (not public.users), so PostgREST can't
+    // auto-join — fetch comments first, then look up author names separately.
     let query = supabase
       .from("post_comments")
-      .select(`id, body, created_at, author_id, users ( display_name, avatar_url )`)
+      .select("id, body, created_at, author_id")
       .eq("post_id", postId)
       .eq("is_held", false)
       .order("created_at", { ascending: false })
@@ -37,16 +39,29 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
 
+    // Resolve author names from public.users (shares the same UUIDs as auth.users)
+    const authorIds = [...new Set(page.map((r) => r.author_id as string))];
+    const { data: userRows } = authorIds.length
+      ? await supabase
+          .from("users")
+          .select("id, display_name, avatar_url")
+          .in("id", authorIds)
+      : { data: [] };
+
+    const userMap = new Map(
+      (userRows ?? []).map((u) => [u.id as string, u as { id: string; display_name: string | null; avatar_url: string | null }])
+    );
+
     const comments = page.map((row) => {
-      const author = row.users as unknown as Record<string, unknown> | null;
+      const author = userMap.get(row.author_id as string);
       return {
         id: row.id as string,
         postId,
         body: row.body as string,
         createdAt: row.created_at as string,
         authorId: row.author_id as string,
-        authorName: (author?.display_name as string | null) ?? "Anonymous",
-        authorAvatar: (author?.avatar_url as string | null) ?? null,
+        authorName: author?.display_name ?? "Anonymous",
+        authorAvatar: author?.avatar_url ?? null,
       };
     });
 

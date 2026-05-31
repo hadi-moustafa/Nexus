@@ -88,7 +88,8 @@ export async function POST(request: NextRequest) {
       data: {
         status: "active",
         plan: billingInterval,
-        endDate,
+        end_date: endDate,
+        auto_renew: true,
       },
     });
   } catch (err) {

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
         articles (
           id, title, description, content, url, thumbnail_url,
           published_at, source_id, source_name, category, language,
-          country_code, ai_summary, view_count
+          country_code, view_count
         )
       `)
       .eq("user_id", auth.userId)
@@ -67,7 +67,6 @@ export async function GET(request: NextRequest) {
               category: (a.category as string) ?? "general",
               language: (a.language as string) ?? "en",
               countryCode: (a.country_code as string | null) ?? null,
-              aiSummary: (a.ai_summary as string | null) ?? null,
               viewCount: (a.view_count as number) ?? 0,
             }
           : null,
@@ -109,6 +108,36 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // Enforce bookmark limit: 5 for free users, unlimited for premium
+    const FREE_BOOKMARK_LIMIT = 5;
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", auth.userId)
+      .in("status", ["active", "trialing"])
+      .maybeSingle();
+
+    const isPremium = !!sub;
+
+    if (!isPremium) {
+      const { count } = await supabase
+        .from("bookmarks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", auth.userId);
+
+      if ((count ?? 0) >= FREE_BOOKMARK_LIMIT) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "FORBIDDEN",
+              message: `Free accounts are limited to ${FREE_BOOKMARK_LIMIT} bookmarks. Upgrade to Premium for unlimited bookmarks.`,
+            },
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     const { data, error } = await supabase
       .from("bookmarks")

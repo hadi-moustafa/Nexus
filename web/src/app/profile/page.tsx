@@ -645,7 +645,7 @@ export default function ProfilePage() {
                   Upgrade to Premium
                 </h2>
                 <p className="text-sm text-[var(--text-secondary)] mb-5">
-                  AI digest, double XP, unlimited bookmarks and more.
+                  Arabic feed, 2× XP, unlimited bookmarks and more.
                 </p>
                 <Link
                   href="/premium"

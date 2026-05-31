@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../models/quiz.dart';
 import '../services/quiz_service.dart';
@@ -49,11 +50,13 @@ class _QuizScreenState extends State<QuizScreen> {
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().contains('NOT_FOUND') || e.toString().contains('404')
-            ? 'No quiz available today — check back tomorrow!'
-            : 'Could not load today\'s quiz.';
+        final isNoQuiz = (e is DioException && e.response?.statusCode == 404) ||
+            e.toString().contains('NOT_FOUND') ||
+            e.toString().contains('404');
         setState(() {
-          _loadError = msg;
+          _loadError = isNoQuiz
+              ? 'No quiz available today — check back tomorrow!'
+              : 'Could not load today\'s quiz.';
           _loadingQuiz = false;
         });
       }
@@ -92,7 +95,8 @@ class _QuizScreenState extends State<QuizScreen> {
       if (mounted) setState(() => _result = result);
     } catch (e) {
       if (mounted) {
-        final isAlreadyDone = e.toString().contains('409') ||
+        final isAlreadyDone = (e is DioException && e.response?.statusCode == 409) ||
+            e.toString().contains('409') ||
             e.toString().contains('already submitted');
         setState(() {
           _result = null;

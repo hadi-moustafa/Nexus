@@ -146,20 +146,6 @@ export default async function ArticlePage({ params }: Props) {
           </div>
         )}
 
-        {/* AI Summary banner */}
-        {article.aiSummary && (
-          <div className="mb-6 p-4 rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary)]">
-                AI Summary
-              </span>
-            </div>
-            <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-              {article.aiSummary}
-            </p>
-          </div>
-        )}
-
         {/* Article body */}
         <div className="prose prose-sm max-w-none text-[var(--text-primary)]">
           {article.content ? (

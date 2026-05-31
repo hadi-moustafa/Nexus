@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/article.dart';
 import '../services/user_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/time_utils.dart';
+import 'premium_screen.dart';
 
 class ArticleScreen extends StatefulWidget {
   final Article article;
@@ -45,6 +47,29 @@ class _ArticleScreenState extends State<ArticleScreen> {
         await UserService.instance.removeBookmark(widget.article.id);
       } else {
         await UserService.instance.addBookmark(widget.article.id);
+      }
+    } on DioException catch (e) {
+      if (mounted) setState(() => _bookmarked = wasBookmarked);
+      if (!mounted) return;
+      if (e.response?.statusCode == 403) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Bookmark limit reached. Upgrade to Premium for unlimited bookmarks.'),
+            action: SnackBarAction(
+              label: 'Upgrade',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => PremiumScreen(isDark: widget.isDark),
+                ),
+              ),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update bookmark')),
+        );
       }
     } catch (_) {
       // Revert on failure
@@ -223,50 +248,6 @@ class _ArticleScreenState extends State<ArticleScreen> {
                   Divider(color: colors.border),
                   const SizedBox(height: 20),
 
-                  // AI summary
-                  if (article.aiSummary != null &&
-                      article.aiSummary!.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: NexusColors.teal.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: NexusColors.teal.withValues(alpha: 0.2)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.auto_awesome,
-                                  size: 14, color: NexusColors.teal),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'AI Summary',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: NexusColors.teal,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            article.aiSummary!,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: colors.textPrimary,
-                              height: 1.6,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
                   // Summary / content
                   if (article.summary != null &&
                       article.summary!.isNotEmpty) ...[
@@ -295,9 +276,7 @@ class _ArticleScreenState extends State<ArticleScreen> {
                   ],
 
                   if ((article.summary == null || article.summary!.isEmpty) &&
-                      (article.content == null || article.content!.isEmpty) &&
-                      (article.aiSummary == null ||
-                          article.aiSummary!.isEmpty)) ...[
+                      (article.content == null || article.content!.isEmpty)) ...[
                     Text(
                       'No preview available. Read the full article on the source website.',
                       style: TextStyle(

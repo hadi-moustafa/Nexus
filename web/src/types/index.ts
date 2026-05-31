@@ -16,7 +16,6 @@ export interface Article {
   category: string;
   language: string;
   countryCode: string | null;
-  aiSummary: string | null;
   viewCount: number;
   journalistId: string | null;
   journalistName: string | null;
@@ -146,6 +145,21 @@ export interface UserSession {
   isCurrent: boolean;
 }
 
+export type JournalistRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface JournalistRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userDisplayName: string | null;
+  status: JournalistRequestStatus;
+  message: string | null;
+  adminNote: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
 export type AuditAction =
   | "sign_in" | "sign_up" | "sign_out"
   | "otp_requested" | "otp_verified"
@@ -158,8 +172,10 @@ export type AuditAction =
   | "admin_role_changed" | "admin_ban" | "admin_force_signout"
   | "subscription_created" | "subscription_cancelled"
   | "journalist_post_created" | "journalist_post_deleted"
+  | "admin_post_deleted"
   | "admin_badge_awarded" | "admin_badge_revoked"
-  | "admin_comment_deleted" | "admin_user_banned";
+  | "admin_comment_deleted" | "admin_user_banned"
+  | "journalist_request_submitted" | "journalist_request_approved" | "journalist_request_rejected";
 
 export interface AuditEntry {
   id: string;

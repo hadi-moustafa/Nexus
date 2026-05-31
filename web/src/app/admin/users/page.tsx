@@ -132,7 +132,7 @@ export default function AdminUsersPage() {
                         }`}
                       >
                         {u.role === "admin" ? <Shield size={10} /> : u.role === "journalist" ? <PenSquare size={10} /> : u.role === "banned" ? <Ban size={10} /> : <User size={10} />}
-                        {u.role}
+                        {u.role ?? 'user'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -141,7 +141,7 @@ export default function AdminUsersPage() {
                           <span className="text-xs text-[var(--text-secondary)]">Saving…</span>
                         ) : (
                           <select
-                            value={u.role}
+                            value={u.role ?? 'user'}
                             onChange={(e) => setRole(u.id, e.target.value)}
                             className="text-xs px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] cursor-pointer"
                           >

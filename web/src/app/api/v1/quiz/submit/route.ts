@@ -40,17 +40,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Prevent double-submission
+    // Prevent double-submission: one quiz per user per calendar day
+    const today = new Date().toISOString().slice(0, 10);
     const { data: existing } = await supabase
       .from("quiz_results")
-      .select("id, score, xp_earned")
-      .eq("quiz_id", quizId)
+      .select("id")
       .eq("user_id", auth.userId)
-      .single();
+      .gte("completed_at", `${today}T00:00:00.000Z`)
+      .lt("completed_at", `${today}T23:59:59.999Z`)
+      .maybeSingle();
 
     if (existing) {
       return NextResponse.json(
-        { error: { code: "VALIDATION_ERROR", message: "Quiz already submitted" } },
+        { error: { code: "VALIDATION_ERROR", message: "You have already completed today's quiz." } },
         { status: 409 }
       );
     }
@@ -90,7 +92,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     // Date-based streak logic
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const lastDate = stats?.last_activity_date as string | null ?? null;
     let currentStreak = (stats?.current_streak as number) ?? 0;
 
@@ -114,9 +115,19 @@ export async function POST(request: NextRequest) {
     const streakBonus = Math.min(newStreak * STREAK_BONUS, 50);
 
     const baseXp = score * XP_PER_CORRECT + (isPerfect ? PERFECT_BONUS : 0) + streakBonus;
-    const xpEarned = quiz?.xp_reward
+    const rawXp = quiz?.xp_reward
       ? Math.round((baseXp / (questions.length * XP_PER_CORRECT + PERFECT_BONUS + 50)) * quiz.xp_reward)
       : baseXp;
+
+    // 2× XP multiplier for active Premium subscribers
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", auth.userId)
+      .in("status", ["active", "trialing"])
+      .maybeSingle();
+
+    const xpEarned = sub ? rawXp * 2 : rawXp;
 
     // Insert quiz result
     const { error: insertErr } = await supabase.from("quiz_results").insert({

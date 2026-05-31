@@ -60,16 +60,21 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() { _isLoading = true; _error = null; });
     try {
       final articles = await ArticlesService.instance.fetchTrending(limit: 5);
+      debugPrint('[HomeScreen] trending loaded: ${articles.length} articles');
       if (mounted) setState(() { _trendingArticles = articles; _isLoading = false; });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[HomeScreen] _loadTrending ERROR: $e\n$st');
       if (mounted) setState(() { _error = 'Could not load articles'; _isLoading = false; });
     }
   }
 
   Future<void> _loadBreaking() async {
     try {
+      debugPrint('[HomeScreen] loading breaking news');
       final response = await ApiClient.instance.get('/feed/breaking', queryParameters: {'limit': 5});
+      debugPrint('[HomeScreen] breaking raw keys=${response.data.keys.toList()}');
       final data = response.data['data'] as List<dynamic>;
+      debugPrint('[HomeScreen] breaking ${data.length} items');
       if (mounted) {
         setState(() {
           _breakingTitles = data
@@ -78,13 +83,18 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
         });
       }
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[HomeScreen] _loadBreaking ERROR: $e\n$st');
+    }
   }
 
   Future<void> _loadRegions() async {
     try {
+      debugPrint('[HomeScreen] loading regions');
       final response = await ApiClient.instance.get('/regions');
+      debugPrint('[HomeScreen] regions raw keys=${response.data.keys.toList()}');
       final data = response.data['data'] as List<dynamic>;
+      debugPrint('[HomeScreen] regions ${data.length} items');
       if (mounted) {
         setState(() {
           _regions = data
@@ -92,7 +102,9 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
         });
       }
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[HomeScreen] _loadRegions ERROR: $e\n$st');
+    }
   }
 
   void _onCountryTap(String country) {

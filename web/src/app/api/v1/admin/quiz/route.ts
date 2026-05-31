@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Create quiz
     const { data: quiz, error: qErr } = await supabase
       .from("quizzes")
-      .insert({ title: title ?? "Daily News Quiz", scheduled_for, xp_reward, is_published: false })
+      .insert({ title: title ?? "Daily News Quiz", scheduled_for, quiz_date: scheduled_for, xp_reward, is_published: false })
       .select("id")
       .single();
 

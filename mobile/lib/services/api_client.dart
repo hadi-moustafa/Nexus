@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import 'auth_service.dart';
 
+const _tag = '[ApiClient]';
+
 /// Base HTTP client for all Nexus API calls.
 ///
 /// Interceptor responsibilities:
@@ -44,6 +46,9 @@ class ApiClient {
     final token = await AuthService.instance.getAccessToken();
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
+      debugPrint('$_tag → ${options.method} ${options.path} [token attached]');
+    } else {
+      debugPrint('$_tag → ${options.method} ${options.path} [NO TOKEN — public request]');
     }
     handler.next(options);
   }
@@ -52,10 +57,18 @@ class ApiClient {
     DioException error,
     ErrorInterceptorHandler handler,
   ) async {
-    if (error.response?.statusCode == 401) {
+    final url = error.requestOptions.path;
+    final status = error.response?.statusCode;
+    debugPrint('$_tag ✗ $url — status=$status type=${error.type} msg=${error.message}');
+    if (error.response?.data != null) {
+      debugPrint('$_tag   response body: ${error.response!.data}');
+    }
+
+    if (status == 401) {
+      debugPrint('$_tag 401 on $url — attempting token refresh');
       final refreshed = await AuthService.instance.refreshToken();
       if (refreshed) {
-        // Retry the original request with the new token
+        debugPrint('$_tag token refreshed — retrying $url');
         final newToken = await AuthService.instance.getAccessToken();
         final opts = error.requestOptions;
         if (newToken != null) {
@@ -65,10 +78,11 @@ class ApiClient {
           final response = await _dio.fetch(opts);
           return handler.resolve(response);
         } catch (retryError) {
+          debugPrint('$_tag retry failed: $retryError');
           return handler.next(error);
         }
       }
-      // Refresh failed — signal main.dart to show LoginScreen
+      debugPrint('$_tag token refresh failed — forcing re-login');
       needsLoginNotifier.value = true;
     }
     handler.next(error);

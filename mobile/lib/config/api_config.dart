@@ -44,7 +44,5 @@ class ApiConfig {
         '259756726649-e3mnp9uab1cu2g0vu37ulip2k0bbfv9u.apps.googleusercontent.com',
   );
 
-  // Kept short so unreachable-host failures surface quickly rather than
-  // blocking the UI for 15 s before the fallback kicks in.
-  static const Duration timeout = Duration(seconds: 6);
+  static const Duration timeout = Duration(seconds: 15);
 }

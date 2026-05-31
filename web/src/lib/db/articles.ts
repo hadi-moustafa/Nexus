@@ -5,7 +5,7 @@ import type { Article } from "@/types";
 // Row mapping
 // Actual DB columns (from Supabase schema):
 //   id, title, url, source_id (uuid FK), source_name (text), journalist_id,
-//   country_code, category, language, ai_summary, description, content,
+//   country_code, category, language, description, content,
 //   thumbnail_url, published_at, view_count, cached_at, cache_expires_at
 // ---------------------------------------------------------------------------
 function rowToArticle(row: Record<string, unknown>): Article {
@@ -22,7 +22,6 @@ function rowToArticle(row: Record<string, unknown>): Article {
     category: (row.category as string) ?? "general",
     language: (row.language as string) ?? "en",
     countryCode: (row.country_code as string | null) ?? null,
-    aiSummary: (row.ai_summary as string | null) ?? null,
     viewCount: (row.view_count as number) ?? 0,
     journalistId: (row.journalist_id as string | null) ?? null,
     journalistName: null,

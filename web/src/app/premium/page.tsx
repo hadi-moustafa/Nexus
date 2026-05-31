@@ -3,16 +3,16 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  Zap, Check, Sparkles, Newspaper, Trophy, BookOpen, X, Loader2,
+  Zap, Check, Globe, Newspaper, Trophy, BookOpen, X, Loader2,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 
 const FEATURES = [
-  { icon: Sparkles, text: "AI-generated daily digest" },
+  { icon: BookOpen,  text: "Unlimited bookmarks (free: 5)" },
+  { icon: Globe,     text: "Full Arabic & multilingual feed" },
+  { icon: Trophy,    text: "2× XP on every daily quiz" },
   { icon: Newspaper, text: "Ad-free reading experience" },
-  { icon: Trophy, text: "Double XP on daily quizzes" },
-  { icon: BookOpen, text: "Unlimited article saves" },
-  { icon: Zap, text: "Early access to new features" },
+  { icon: Zap,       text: "Early access to new features" },
 ];
 
 const PLANS = [
@@ -211,10 +211,10 @@ function PremiumContent() {
 
         {isPremium && !verifying && (
           <button
-            onClick={() => router.push("/digest")}
+            onClick={() => router.push("/feed?lang=ar")}
             className="w-full py-3.5 rounded-2xl bg-[var(--primary)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
           >
-            View today&apos;s digest →
+            Browse Arabic feed →
           </button>
         )}
 

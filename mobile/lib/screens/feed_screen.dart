@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
@@ -5,6 +6,7 @@ import '../models/article.dart';
 import '../services/articles_service.dart';
 import '../utils/time_utils.dart';
 import 'article_screen.dart';
+import 'premium_screen.dart';
 import 'search_screen.dart';
 
 // Mirrors the tab definitions in the web feed page.
@@ -39,6 +41,7 @@ class _FeedScreenState extends State<FeedScreen> {
   bool _hasMore = false;
   String? _cursor;
   String? _error;
+  bool _premiumLocked = false;
 
   final _scrollController = ScrollController();
 
@@ -68,6 +71,7 @@ class _FeedScreenState extends State<FeedScreen> {
       setState(() {
         _loading = true;
         _error = null;
+        _premiumLocked = false;
         _articles = [];
         _cursor = null;
         _hasMore = false;
@@ -78,12 +82,14 @@ class _FeedScreenState extends State<FeedScreen> {
 
     try {
       final tab = _activeTab;
+      debugPrint('[FeedScreen] loading tab="${tab.label}" category="${tab.category}" lang="${tab.language}" reset=$reset cursor=$_cursor');
       final result = await ArticlesService.instance.fetchFeed(
         limit: 20,
         cursor: reset ? null : _cursor,
         category: tab.category.isEmpty ? null : tab.category,
         language: tab.language.isEmpty ? null : tab.language,
       );
+      debugPrint('[FeedScreen] loaded ${result.articles.length} articles, nextCursor=${result.nextCursor}');
 
       if (!mounted) return;
       setState(() {
@@ -97,7 +103,24 @@ class _FeedScreenState extends State<FeedScreen> {
         _loading = false;
         _loadingMore = false;
       });
-    } catch (_) {
+    } on DioException catch (e, st) {
+      debugPrint('[FeedScreen] _load ERROR: $e\n$st');
+      if (!mounted) return;
+      if (e.response?.statusCode == 403) {
+        setState(() {
+          _premiumLocked = true;
+          _loading = false;
+          _loadingMore = false;
+        });
+      } else {
+        setState(() {
+          _error = 'Could not load articles';
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
+    } catch (e, st) {
+      debugPrint('[FeedScreen] _load ERROR: $e\n$st');
       if (!mounted) return;
       setState(() {
         _error = 'Could not load articles';
@@ -196,6 +219,80 @@ class _FeedScreenState extends State<FeedScreen> {
         delegate: SliverChildBuilderDelegate(
           (_, __) => _FeedSkeleton(colors: colors),
           childCount: 5,
+        ),
+      );
+    }
+
+    if (_premiumLocked) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 8),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: NexusColors.amber.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: NexusColors.amber.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.lock_rounded,
+                        size: 48, color: NexusColors.amber),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Premium Content',
+                      style: TextStyle(
+                        fontFamily: 'Fraunces',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'The Arabic feed is available exclusively for Premium subscribers.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colors.textSecondary,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context)
+                            .push(MaterialPageRoute(
+                              builder: (_) =>
+                                  PremiumScreen(isDark: widget.isDark),
+                            ))
+                            .then((_) => _load(reset: true)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: NexusColors.amber,
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Upgrade to Premium',
+                          style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }

@@ -7,7 +7,6 @@
 - **Next.js 16.2** (App Router), **React 19**, **TypeScript**, **TailwindCSS 4**
 - **Supabase** — PostgreSQL + Google OAuth only (no Edge Functions)
 - **Stripe** — subscription billing
-- **Google Gemini** — AI digest generation
 - **Guardian / GNews** — news ingestion sources
 
 ## Architecture Rules
@@ -86,9 +85,8 @@
 - [x] Stripe session verification & subscription activation (`POST /api/v1/stripe/verify-session`)
 - [x] Stripe webhook handler (`GET /api/v1/stripe/webhook`) — subscription lifecycle events
 - [x] Subscription status endpoint (`GET /api/v1/user/subscription`)
-- [x] AI daily digest (`/app/digest`) — Gemini-generated, premium-gated
-- [x] Digest API (`GET /api/v1/digest`) — on-demand generation with 24h → 7d → all articles fallback
-- [x] Manual digest generation endpoint (`POST /api/v1/internal/generate-digest`)
+- [x] Premium limits enforced: 5 bookmarks (free), Arabic feed gated, 2× XP on quizzes for premium
+- [x] Quiz rotation from pool — daily quiz selected by `daysSinceEpoch % poolSize`
 
 ### News Ingestion
 - [x] Guardian API ingestion (`lib/guardian.ts`) — 8+ sections mapped to categories
@@ -158,7 +156,6 @@
 | Article DB queries | `src/lib/db/articles.ts` |
 | User DB queries | `src/lib/db/users.ts` |
 | Stripe client + plans | `src/lib/stripe.ts` |
-| Gemini digest gen | `src/lib/gemini.ts` |
 | Guardian ingestion | `src/lib/guardian.ts` |
 | GNews client | `src/lib/gnews.ts` |
 | Supabase server client | `src/lib/supabase/server.ts` |

@@ -1,4 +1,5 @@
 import '../models/journalist_post.dart';
+import '../models/journalist_request.dart';
 import 'api_client.dart';
 
 class JournalistService {
@@ -123,5 +124,38 @@ class JournalistService {
   /// Delete own post.
   Future<void> deletePost(String postId) async {
     await ApiClient.instance.delete('/journalist/posts/$postId');
+  }
+
+  // ── Post bookmarks ────────────────────────────────────────────────────────
+
+  /// Returns true if the current user has bookmarked [postId].
+  Future<bool> checkPostBookmark(String postId) async {
+    final res = await ApiClient.instance.get('/journalist/posts/$postId/bookmark');
+    return res.data['data']['isBookmarked'] as bool;
+  }
+
+  /// Toggles bookmark for [postId]. Returns the new bookmark state (true = bookmarked).
+  Future<bool> togglePostBookmark(String postId) async {
+    final res = await ApiClient.instance.post('/journalist/posts/$postId/bookmark');
+    return res.data['data']['isBookmarked'] as bool;
+  }
+
+  // ── Journalist request flow ───────────────────────────────────────────────
+
+  /// Fetch current user's journalist request (null if no request yet).
+  Future<JournalistRequest?> fetchMyRequest() async {
+    final res = await ApiClient.instance.get('/user/journalist-request');
+    final data = res.data['data'];
+    if (data == null) return null;
+    return JournalistRequest.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Submit or re-submit a journalist request.
+  Future<JournalistRequest> submitRequest({String? message}) async {
+    final res = await ApiClient.instance.post(
+      '/user/journalist-request',
+      data: {if (message != null && message.isNotEmpty) 'message': message},
+    );
+    return JournalistRequest.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 }

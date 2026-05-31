@@ -11,10 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.6
-  dio: ^5.7.0                        # HTTP client with interceptor support (auth, retries)
-  supabase_flutter: ^2.8.0           # Auth + session management (OAuth redirect + email/password)
-  url_launcher: ^6.3.0               # Opens article URLs in external browser
-  app_links: ^7.0.0                  # Captures incoming deep links (OAuth + payment callbacks)
+  dio: ^5.7.0
+  supabase_flutter: ^2.8.0
+  url_launcher: ^6.3.0
+  app_links: ^7.0.0
 
 dev_dependencies:
   flutter_test:
@@ -23,3 +23,14 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
+
+  fonts:
+    - family: Fraunces
+      fonts:
+        - asset: assets/fonts/Fraunces-Variable.ttf
+    - family: DM Sans
+      fonts:
+        - asset: assets/fonts/DMSans-Variable.ttf

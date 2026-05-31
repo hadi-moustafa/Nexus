@@ -178,9 +178,11 @@ class _PremiumScreenState extends State<PremiumScreen>
   // ── Already premium ────────────────────────────────────────────────────────
 
   Widget _buildActiveSubscription(DynamicColors colors) {
-    final sub = _subscription!;
-    final endStr = sub.endDate != null
-        ? '${sub.endDate!.day}/${sub.endDate!.month}/${sub.endDate!.year}'
+    final sub = _subscription;
+    final endDate = sub?.endDate;
+    final autoRenew = sub?.autoRenew ?? true;
+    final endStr = endDate != null
+        ? '${endDate.day}/${endDate.month}/${endDate.year}'
         : null;
 
     return Column(
@@ -224,7 +226,10 @@ class _PremiumScreenState extends State<PremiumScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Renews on', style: TextStyle(color: colors.textSecondary, fontSize: 14)),
+                Text(
+                  autoRenew ? 'Renews on' : 'Access until',
+                  style: TextStyle(color: colors.textSecondary, fontSize: 14),
+                ),
                 Text(endStr,
                     style: TextStyle(
                         color: colors.textPrimary,
@@ -233,8 +238,30 @@ class _PremiumScreenState extends State<PremiumScreen>
               ],
             ),
           ),
+          if (!autoRenew) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: NexusColors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: NexusColors.amber.withOpacity(0.3)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.info_outline, color: NexusColors.amber, size: 15),
+                  SizedBox(width: 6),
+                  Text(
+                    'Auto-renewal is off — won\'t renew after this date.',
+                    style: TextStyle(fontSize: 12, color: NexusColors.amber),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         _buildFeatureList(colors),
       ],
     );
@@ -355,7 +382,7 @@ class _PremiumScreenState extends State<PremiumScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'Unlock AI digests, unlimited bookmarks,\nand ad-free reading.',
+                'Unlimited bookmarks, Arabic feed, 2× XP,\nad-free reading, and more.',
                 style: TextStyle(fontSize: 15, color: colors.textSecondary, height: 1.5),
                 textAlign: TextAlign.center,
               ),
@@ -453,29 +480,47 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   Widget _buildFeatureList(DynamicColors colors) {
     const features = [
-      (Icons.auto_awesome, 'AI-generated daily digest'),
-      (Icons.bookmark_outline, 'Unlimited bookmarks'),
-      (Icons.block, 'Ad-free reading experience'),
-      (Icons.translate, 'Full Arabic & multilingual feed'),
-      (Icons.leaderboard_outlined, 'Leaderboard & XP boosts'),
+      (Icons.bookmark_added, NexusColors.teal, 'Unlimited bookmarks', 'Free users are limited to 5 saved articles'),
+      (Icons.translate, NexusColors.amber, 'Arabic & multilingual feed', 'Full Arabic content — free users get English only'),
+      (Icons.bolt, NexusColors.amber, '2× XP on every quiz', 'Premium subscribers earn double XP, climb faster'),
+      (Icons.block, Color(0xFF7C83FF), 'Ad-free reading', 'Zero ads, zero distractions across all articles'),
+      (Icons.newspaper, NexusColors.teal, 'Exclusive journalist content', 'Premium posts, deep-dives & newsletters'),
+      (Icons.download_rounded, Color(0xFF7C83FF), 'Offline reading mode', 'Save articles to read without internet'),
+      (Icons.bar_chart_rounded, NexusColors.amber, 'Advanced quiz analytics', 'Track your topic accuracy and improvement over time'),
+      (Icons.star_rounded, NexusColors.teal, 'Early access to new features', 'Be first to try everything new on Nexus'),
     ];
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: features.map((f) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: 14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 36,
-              height: 36,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
-                color: NexusColors.teal.withOpacity(0.1),
+                color: f.$2.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(f.$1, color: NexusColors.teal, size: 18),
+              child: Icon(f.$1, color: f.$2, size: 20),
             ),
             const SizedBox(width: 14),
-            Text(f.$2,
-                style: TextStyle(fontSize: 15, color: colors.textPrimary)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(f.$3,
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(f.$4,
+                      style: TextStyle(fontSize: 12, color: colors.textSecondary)),
+                ],
+              ),
+            ),
           ],
         ),
       )).toList(),

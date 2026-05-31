@@ -3,7 +3,7 @@
 import { useTheme } from "next-themes";
 import {
   Moon, Sun, LogIn, LogOut, Search,
-  Newspaper, Globe, Trophy, Sparkles, ShieldCheck, Menu, X,
+  Newspaper, Globe, Trophy, PuzzleIcon, ShieldCheck, Menu, X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -12,11 +12,11 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 
 const NAV_LINKS = [
-  { href: "/",        label: "Home",   icon: Globe },
-  { href: "/feed",    label: "Feed",   icon: Newspaper },
-  { href: "/search",  label: "Search", icon: Search },
-  { href: "/quiz",    label: "Quiz",   icon: Trophy },
-  { href: "/digest",  label: "Digest", icon: Sparkles },
+  { href: "/",           label: "Home",      icon: Globe },
+  { href: "/feed",       label: "Feed",      icon: Newspaper },
+  { href: "/search",     label: "Search",    icon: Search },
+  { href: "/quiz",       label: "Quiz",      icon: Trophy },
+  { href: "/crossword",  label: "Crossword", icon: PuzzleIcon },
 ];
 
 export function Navbar() {

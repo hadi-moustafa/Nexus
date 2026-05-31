@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     // Articles by this journalist
     let articleQuery = supabase
       .from("articles")
-      .select("id, title, description, thumbnail_url, published_at, source_name, category, url, country_code, ai_summary, view_count, journalist_id")
+      .select("id, title, description, thumbnail_url, published_at, source_name, category, url, country_code, view_count, journalist_id")
       .eq("journalist_id", id)
       .order("published_at", { ascending: false })
       .limit(limit + 1);

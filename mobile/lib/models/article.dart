@@ -13,7 +13,6 @@ class Article {
   final String category;
   final String language;
   final String? countryCode;
-  final String? aiSummary;
   final int viewCount;
   final String? region;
 
@@ -30,7 +29,6 @@ class Article {
     required this.category,
     required this.language,
     this.countryCode,
-    this.aiSummary,
     this.viewCount = 0,
     this.region,
   });
@@ -49,7 +47,6 @@ class Article {
       category: json['category'] as String,
       language: json['language'] as String,
       countryCode: json['countryCode'] as String?,
-      aiSummary: json['aiSummary'] as String?,
       viewCount: json['viewCount'] as int? ?? 0,
       region: json['region'] as String?,
     );
@@ -68,7 +65,6 @@ class Article {
         'category': category,
         'language': language,
         'countryCode': countryCode,
-        'aiSummary': aiSummary,
         'viewCount': viewCount,
         'region': region,
       };
