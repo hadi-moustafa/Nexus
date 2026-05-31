@@ -23,12 +23,16 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    // Get auth metadata (provider) — requires service-role admin API so it
-    // works for both cookie-based web sessions and Bearer-token mobile calls.
-    const { data: { user: authUser } } = await supabase.auth.admin.getUserById(auth.userId);
+    // Fetch auth metadata and profile in parallel to reduce latency.
+    // admin.getUserById is the only way to get app_metadata (provider) for
+    // both cookie-based and Bearer-token sessions.
+    const [{ data: { user: authUser } }, profileResult] = await Promise.all([
+      supabase.auth.admin.getUserById(auth.userId),
+      getUserProfile(auth.userId),
+    ]);
     const provider = authUser?.app_metadata?.provider ?? "email";
 
-    let profile = await getUserProfile(auth.userId);
+    let profile = profileResult;
 
     if (!profile) {
       // No DB row yet — create all three rows now (idempotent upserts).
@@ -90,15 +94,22 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const { data: roleRow } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", auth.userId)
-      .single();
+    // Fetch role and track session in parallel.
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+    const ua = request.headers.get("user-agent");
+    const [{ data: roleRow }, { isNew }] = await Promise.all([
+      supabase.from("users").select("role").eq("id", auth.userId).single(),
+      trackSession(auth.userId, ip, ua),
+    ]);
     const role = (roleRow?.role as string) ?? "user";
     const isAdmin = role === "admin";
 
-    // If journalist, fetch their profile id
+    if (isNew && provider === "email") {
+      void logAction("sign_in", auth.userId, { method: "email" }, request);
+    }
+
+    // Journalist id only needed for journalist role — still a separate query
+    // but it's rare and non-blocking for regular users.
     let journalistId: string | null = null;
     if (role === "journalist") {
       const { data: jRow } = await supabase
@@ -107,16 +118,6 @@ export async function GET(request: NextRequest) {
         .eq("user_id", auth.userId)
         .maybeSingle();
       journalistId = jRow?.id ?? null;
-    }
-
-    // Track session; only log sign_in when it's a genuinely new session
-    // (i.e., first request from this device since last sign-out).
-    // OAuth sign-ins are already logged in /api/v1/auth/callback.
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-    const ua = request.headers.get("user-agent");
-    const { isNew } = await trackSession(auth.userId, ip, ua);
-    if (isNew && provider === "email") {
-      void logAction("sign_in", auth.userId, { method: "email" }, request);
     }
 
     return Response.json({ data: { ...profile, provider, isAdmin, role, journalistId } });

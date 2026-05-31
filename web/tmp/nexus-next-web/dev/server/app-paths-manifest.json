@@ -1,24 +1,7 @@
 {
-  "/admin/page": "app/admin/page.js",
-  "/admin/quiz/page": "app/admin/quiz/page.js",
-  "/api/v1/admin/quiz/[quizId]/route": "app/api/v1/admin/quiz/[quizId]/route.js",
-  "/api/v1/admin/quiz/route": "app/api/v1/admin/quiz/route.js",
   "/api/v1/auth/session/route": "app/api/v1/auth/session/route.js",
   "/api/v1/feed/breaking/route": "app/api/v1/feed/breaking/route.js",
-  "/api/v1/feed/route": "app/api/v1/feed/route.js",
-  "/api/v1/journalist/posts/[id]/bookmark/route": "app/api/v1/journalist/posts/[id]/bookmark/route.js",
-  "/api/v1/journalist/posts/[id]/comments/route": "app/api/v1/journalist/posts/[id]/comments/route.js",
-  "/api/v1/journalist/posts/[id]/reactions/route": "app/api/v1/journalist/posts/[id]/reactions/route.js",
-  "/api/v1/journalist/posts/route": "app/api/v1/journalist/posts/route.js",
-  "/api/v1/journalist/profile/route": "app/api/v1/journalist/profile/route.js",
-  "/api/v1/quiz/today/route": "app/api/v1/quiz/today/route.js",
   "/api/v1/regions/route": "app/api/v1/regions/route.js",
-  "/api/v1/stripe/checkout/route": "app/api/v1/stripe/checkout/route.js",
   "/api/v1/trending/route": "app/api/v1/trending/route.js",
-  "/api/v1/user/bookmarks/route": "app/api/v1/user/bookmarks/route.js",
-  "/api/v1/user/journalist-request/route": "app/api/v1/user/journalist-request/route.js",
-  "/api/v1/user/notifications/route": "app/api/v1/user/notifications/route.js",
-  "/api/v1/user/stats/route": "app/api/v1/user/stats/route.js",
-  "/api/v1/user/subscription/route": "app/api/v1/user/subscription/route.js",
-  "/page": "app/page.js"
+  "/api/v1/user/notifications/route": "app/api/v1/user/notifications/route.js"
 }

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//proc/22061/**)",
+      "Read(//proc/22061/fd/**)",
+      "Read(//proc/22333/**)",
+      "Read(//proc/22359/**)",
+      "Bash(kill -9 22050 22061 22333 22359)",
+      "Bash(npm run dev > /tmp/nextjs-dev.log 2>&1 & *)",
+      "Bash(curl -s -o /dev/null -w \"proxy+regions: %{http_code} in %{time_total}s\\\\n\" --max-time 30 http://localhost:3000/api/v1/regions)",
+      "Bash(curl -s -o /dev/null -w \"regions: %{http_code} %{time_total}s\\\\n\" --max-time 10 http://localhost:3000/api/v1/regions)",
+      "Bash(curl -s -o /dev/null -w \"trending: %{http_code} %{time_total}s\\\\n\" --max-time 10 \"http://localhost:3000/api/v1/trending?limit=5\")",
+      "Bash(curl -s -o /dev/null -w \"breaking: %{http_code} %{time_total}s\\\\n\" --max-time 10 http://localhost:3000/api/v1/feed/breaking)",
+      "Bash(curl -s -o /dev/null -w \"auth/session: %{http_code} %{time_total}s\\\\n\" --max-time 10 http://localhost:3000/api/v1/auth/session)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

@@ -182,15 +182,6 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
-// Validate ../../../../src/app/digest/page.tsx
-{
-  type __IsExpected<Specific extends AppPageConfig<"/digest">> = Specific
-  const handler = {} as typeof import("../../../../src/app/digest/page.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
 // Validate ../../../../src/app/feed/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/feed">> = Specific
@@ -569,15 +560,6 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
-// Validate ../../../../src/app/api/v1/digest/route.ts
-{
-  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/digest">> = Specific
-  const handler = {} as typeof import("../../../../src/app/api/v1/digest/route.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
 // Validate ../../../../src/app/api/v1/feed/breaking/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/feed/breaking">> = Specific
@@ -600,15 +582,6 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/internal/fetch-news">> = Specific
   const handler = {} as typeof import("../../../../src/app/api/v1/internal/fetch-news/route.js")
-  type __Check = __IsExpected<typeof handler>
-  // @ts-ignore
-  type __Unused = __Check
-}
-
-// Validate ../../../../src/app/api/v1/internal/generate-digest/route.ts
-{
-  type __IsExpected<Specific extends RouteHandlerConfig<"/api/v1/internal/generate-digest">> = Specific
-  const handler = {} as typeof import("../../../../src/app/api/v1/internal/generate-digest/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

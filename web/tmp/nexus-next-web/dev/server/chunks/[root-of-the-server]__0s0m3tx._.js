@@ -147,7 +147,12 @@ async function proxy(request) {
             headers: getCorsHeaders(request)
         });
     }
-    // 2. Always refresh the Supabase session cookie (keeps it from expiring)
+    // 2. Refresh the Supabase session cookie for web routes only.
+    // API routes use Bearer token auth — skip the cookie refresh to avoid
+    // blocking every mobile request on a Supabase network call.
+    if (pathname.startsWith("/api/")) {
+        return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].next();
+    }
     const response = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$middleware$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["updateSession"])(request);
     // 3. Attach CORS headers to every API response so the browser allows it
     if (pathname.startsWith("/api/")) {

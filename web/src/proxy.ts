@@ -34,7 +34,12 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  // 2. Always refresh the Supabase session cookie (keeps it from expiring)
+  // 2. Refresh the Supabase session cookie for web routes only.
+  // API routes use Bearer token auth — skip the cookie refresh to avoid
+  // blocking every mobile request on a Supabase network call.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
   const response = await updateSession(request);
 
   // 3. Attach CORS headers to every API response so the browser allows it
