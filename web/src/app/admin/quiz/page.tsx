@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Eye, EyeOff, Trash2, Sparkles } from "lucide-react";
+import { Plus, Eye, EyeOff, Trash2 } from "lucide-react";
 
 interface Quiz {
   id: string;
@@ -33,8 +33,6 @@ export default function AdminQuizPage() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [genResult, setGenResult] = useState<{ created: number; errors?: string[] } | null>(null);
   const [scheduledFor, setScheduledFor] = useState(new Date().toISOString().slice(0, 10));
   const [title, setTitle] = useState("Daily News Quiz");
   const [xpReward, setXpReward] = useState(100);
@@ -48,27 +46,6 @@ export default function AdminQuizPage() {
       .then(({ data }) => setQuizzes(data ?? []))
       .finally(() => setLoading(false));
   }, []);
-
-  const generateQuizzes = async () => {
-    setGenerating(true);
-    setGenResult(null);
-    try {
-      const res = await fetch("/api/v1/internal/generate-quizzes", { method: "POST" });
-      const json = await res.json();
-      if (json.data) {
-        setGenResult(json.data);
-        // Refresh quiz list
-        fetch("/api/v1/admin/quiz")
-          .then((r) => r.json())
-          .then(({ data }) => setQuizzes(data ?? []));
-      } else {
-        setGenResult({ created: 0, errors: [json.error?.message ?? "Unknown error"] });
-      }
-    } catch {
-      setGenResult({ created: 0, errors: ["Network error"] });
-    }
-    setGenerating(false);
-  };
 
   const togglePublish = async (quiz: Quiz) => {
     setToggling(quiz.id);
@@ -163,14 +140,6 @@ export default function AdminQuizPage() {
         </h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={generateQuizzes}
-            disabled={generating}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[var(--border)] text-sm font-medium text-[var(--text-primary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors disabled:opacity-50"
-          >
-            <Sparkles size={15} />
-            {generating ? "Generating…" : "AI Generate 30 days"}
-          </button>
-          <button
             onClick={() => setShowForm((v) => !v)}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
           >
@@ -179,19 +148,6 @@ export default function AdminQuizPage() {
           </button>
         </div>
       </div>
-
-      {/* Generation result banner */}
-      {genResult && (
-        <div className={`mb-4 p-3 rounded-xl border text-sm ${
-          genResult.errors?.length
-            ? "border-amber-400/40 bg-amber-500/5 text-amber-700"
-            : "border-green-400/40 bg-green-500/5 text-green-700"
-        }`}>
-          {genResult.created > 0 && <span>✓ Created {genResult.created} quiz{genResult.created !== 1 ? "zes" : ""}. </span>}
-          {genResult.errors?.map((e, i) => <span key={i} className="block text-xs opacity-70">{e}</span>)}
-          {genResult.created === 0 && !genResult.errors?.length && <span>All upcoming dates already have quizzes.</span>}
-        </div>
-      )}
 
       {/* ── Create form ── */}
       {showForm && (

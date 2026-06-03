@@ -92,10 +92,11 @@ export async function getArticles(opts: {
   cursor?: string;
   category?: string;
   countryCode?: string;
+  countryCodes?: string[];
   language?: string;
   topics?: string[];
 } = {}): Promise<{ articles: Article[]; nextCursor: string | null }> {
-  const { limit = 20, cursor, category, countryCode, language, topics } = opts;
+  const { limit = 20, cursor, category, countryCode, countryCodes, language, topics } = opts;
 
   const supabase = createPublicClient();
 
@@ -112,6 +113,7 @@ export async function getArticles(opts: {
   }
 
   if (countryCode) query = query.eq("country_code", countryCode);
+  if (countryCodes && countryCodes.length > 0) query = query.in("country_code", countryCodes);
   if (language) query = query.eq("language", language);
   if (topics && topics.length > 0) query = query.in("category", topics);
 

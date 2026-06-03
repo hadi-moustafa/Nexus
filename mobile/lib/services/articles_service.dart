@@ -71,6 +71,19 @@ class ArticlesService {
     return Article.fromJson(response.data['data'] as Map<String, dynamic>);
   }
 
+  /// Articles for a world-map region (e.g. "europe", "asia", "middle-east").
+  Future<({List<Article> articles, String? nextCursor})> fetchArticlesByRegion(
+    String regionSlug, {
+    int limit = 20,
+    String? cursor,
+  }) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (cursor != null) params['cursor'] = cursor;
+    final response = await ApiClient.instance
+        .get('/regions/$regionSlug/articles', queryParameters: params);
+    return _parsePage(response.data);
+  }
+
   /// Full-text search.
   Future<({List<Article> articles, String? nextCursor})> searchArticles({
     required String query,

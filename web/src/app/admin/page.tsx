@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdminPage } from "@/lib/admin";
 import { Users, FileText, MessageSquare, Rss } from "lucide-react";
+import { FetchNewsButton } from "./fetch-news-button";
 
 async function getStats() {
   const cookieStore = await cookies();
@@ -48,9 +49,12 @@ export default async function AdminPage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-semibold text-[var(--text-primary)] mb-8">
-        Dashboard
-      </h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="font-display text-2xl font-semibold text-[var(--text-primary)]">
+          Dashboard
+        </h1>
+        <FetchNewsButton />
+      </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">

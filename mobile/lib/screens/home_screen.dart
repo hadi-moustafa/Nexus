@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../theme/app_theme.dart';
 import '../widgets/article_card.dart';
 import '../models/article.dart';
@@ -22,25 +24,14 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _RegionData {
-  final String slug;
-  final String name;
-  final int articleCount;
-  _RegionData({required this.slug, required this.name, required this.articleCount});
-  factory _RegionData.fromJson(Map<String, dynamic> j) => _RegionData(
-        slug: j['slug'] as String,
-        name: j['name'] as String,
-        articleCount: j['articleCount'] as int? ?? 0,
-      );
-}
-
 class _HomeScreenState extends State<HomeScreen> {
   bool _showCountryPanel = false;
-  String _selectedCountry = '';
+  String _selectedSlug = '';
+  String _selectedName = '';
 
   List<Article> _trendingArticles = [];
   List<String> _breakingTitles = [];
-  List<_RegionData> _regions = [];
+  Map<String, int> _regionCounts = {};
   bool _isLoading = false;
   String? _error;
 
@@ -60,21 +51,16 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() { _isLoading = true; _error = null; });
     try {
       final articles = await ArticlesService.instance.fetchTrending(limit: 5);
-      debugPrint('[HomeScreen] trending loaded: ${articles.length} articles');
       if (mounted) setState(() { _trendingArticles = articles; _isLoading = false; });
-    } catch (e, st) {
-      debugPrint('[HomeScreen] _loadTrending ERROR: $e\n$st');
+    } catch (e) {
       if (mounted) setState(() { _error = 'Could not load articles'; _isLoading = false; });
     }
   }
 
   Future<void> _loadBreaking() async {
     try {
-      debugPrint('[HomeScreen] loading breaking news');
       final response = await ApiClient.instance.get('/feed/breaking', queryParameters: {'limit': 5});
-      debugPrint('[HomeScreen] breaking raw keys=${response.data.keys.toList()}');
       final data = response.data['data'] as List<dynamic>;
-      debugPrint('[HomeScreen] breaking ${data.length} items');
       if (mounted) {
         setState(() {
           _breakingTitles = data
@@ -83,33 +69,29 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
         });
       }
-    } catch (e, st) {
-      debugPrint('[HomeScreen] _loadBreaking ERROR: $e\n$st');
-    }
+    } catch (_) {}
   }
 
   Future<void> _loadRegions() async {
     try {
-      debugPrint('[HomeScreen] loading regions');
       final response = await ApiClient.instance.get('/regions');
-      debugPrint('[HomeScreen] regions raw keys=${response.data.keys.toList()}');
       final data = response.data['data'] as List<dynamic>;
-      debugPrint('[HomeScreen] regions ${data.length} items');
       if (mounted) {
         setState(() {
-          _regions = data
-              .map((e) => _RegionData.fromJson(e as Map<String, dynamic>))
-              .toList();
+          _regionCounts = {
+            for (final e in data)
+              (e as Map<String, dynamic>)['slug'] as String:
+                  (e['articleCount'] as int? ?? 0),
+          };
         });
       }
-    } catch (e, st) {
-      debugPrint('[HomeScreen] _loadRegions ERROR: $e\n$st');
-    }
+    } catch (_) {}
   }
 
-  void _onCountryTap(String country) {
+  void _onRegionTap(String slug, String name) {
     setState(() {
-      _selectedCountry = country;
+      _selectedSlug = slug;
+      _selectedName = name;
       _showCountryPanel = true;
     });
   }
@@ -122,10 +104,9 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: colors.background,
       body: Stack(
         children: [
-          // Main Content
           CustomScrollView(
             slivers: [
-              // App Bar
+              // ── App bar ─────────────────────────────────────────────────
               SliverAppBar(
                 floating: true,
                 backgroundColor: colors.background,
@@ -133,34 +114,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: Row(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 32, height: 32,
                       decoration: BoxDecoration(
                         color: NexusColors.teal,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Center(
-                        child: Text(
-                          'N',
-                          style: TextStyle(
-                            fontFamily: 'Fraunces',
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: Text('N',
+                            style: TextStyle(
+                              fontFamily: 'Fraunces',
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            )),
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      'Nexus',
-                      style: TextStyle(
-                        fontFamily: 'Fraunces',
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textPrimary,
-                      ),
-                    ),
+                    Text('Nexus',
+                        style: TextStyle(
+                          fontFamily: 'Fraunces',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: colors.textPrimary,
+                        )),
                   ],
                 ),
                 actions: [
@@ -172,113 +148,85 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: widget.onToggleTheme,
                   ),
                   IconButton(
-                    icon: Icon(
-                      Icons.notifications_outlined,
-                      color: colors.textPrimary,
-                    ),
+                    icon: Icon(Icons.notifications_outlined, color: colors.textPrimary),
                     onPressed: () {},
                   ),
                 ],
               ),
 
-              // Breaking News Banner
+              // ── Breaking news ────────────────────────────────────────────
               if (_breakingTitles.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _BreakingNewsBanner(
+                  child: _BreakingNewsBanner(isDark: widget.isDark, titles: _breakingTitles),
+                ),
+
+              // ── World map ────────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Explore Global News',
+                          style: TextStyle(
+                            fontFamily: 'Fraunces',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          )),
+                      const SizedBox(height: 4),
+                      Text('Tap a region to read its latest stories',
+                          style: TextStyle(fontSize: 13, color: colors.textSecondary)),
+                      const SizedBox(height: 14),
+                    ],
+                  ),
+                ),
+              ),
+
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 300,
+                  child: _WorldMap(
                     isDark: widget.isDark,
-                    titles: _breakingTitles,
+                    regionCounts: _regionCounts,
+                    onRegionTap: _onRegionTap,
                   ),
                 ),
+              ),
 
-              // Interactive Map Section
+              // ── Trending ─────────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Explore Global News',
-                        style: TextStyle(
-                          fontFamily: 'Fraunces',
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: colors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap on a region to discover stories',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: colors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      // Map Placeholder
-                      _InteractiveMap(
-                        isDark: widget.isDark,
-                        onCountryTap: _onCountryTap,
-                        regions: _regions,
-                      ),
+                      Text('Trending Now',
+                          style: TextStyle(
+                            fontFamily: 'Fraunces',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textPrimary,
+                          )),
                     ],
                   ),
                 ),
               ),
 
-              // Trending Stories
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Trending Now',
-                            style: TextStyle(
-                              fontFamily: 'Fraunces',
-                              fontSize: 20,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textPrimary,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              'See all',
-                              style: TextStyle(
-                                color: NexusColors.teal,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Trending Articles List
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 sliver: _buildTrendingList(),
               ),
 
-              // Bottom Padding
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
 
-          // Country Panel (Bottom Sheet)
+          // ── Country panel overlay ────────────────────────────────────────
           if (_showCountryPanel)
             CountryPanel(
-              country: _selectedCountry,
+              regionSlug: _selectedSlug,
+              regionName: _selectedName,
               isDark: widget.isDark,
               onClose: () => setState(() => _showCountryPanel = false),
             ),
@@ -296,7 +244,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-
     if (_error != null) {
       return SliverToBoxAdapter(
         child: Padding(
@@ -304,19 +251,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Center(
             child: Column(
               children: [
-                Text(
-                  _error!,
-                  style: TextStyle(
-                    color: DynamicColors(widget.isDark).textSecondary,
-                  ),
-                ),
+                Text(_error!, style: TextStyle(color: DynamicColors(widget.isDark).textSecondary)),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _loadTrending,
-                  child: const Text(
-                    'Try again',
-                    style: TextStyle(color: NexusColors.teal),
-                  ),
+                  child: const Text('Try again', style: TextStyle(color: NexusColors.teal)),
                 ),
               ],
             ),
@@ -324,23 +263,17 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-
     if (_trendingArticles.isEmpty) {
       return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Center(
-            child: Text(
-              'No articles yet — check back soon.',
-              style: TextStyle(
-                color: DynamicColors(widget.isDark).textSecondary,
-              ),
-            ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text('No articles yet — check back soon.',
+                style: TextStyle(color: DynamicColors(widget.isDark).textSecondary)),
           ),
         ),
       );
     }
-
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
@@ -353,9 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
             isDark: widget.isDark,
             imageUrl: article.imageUrl,
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ArticleScreen(article: article, isDark: widget.isDark),
-              ),
+              MaterialPageRoute(builder: (_) => ArticleScreen(article: article, isDark: widget.isDark)),
             ),
           );
         },
@@ -365,10 +296,248 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ── World Map ─────────────────────────────────────────────────────────────────
+
+class _RegionConfig {
+  final String slug;
+  final String name;
+  final String emoji;
+  final Color color;
+  final LatLng center;
+  final List<LatLng> polygon;
+  // Bounding box for tap detection
+  final double minLat, maxLat, minLng, maxLng;
+
+  const _RegionConfig({
+    required this.slug,
+    required this.name,
+    required this.emoji,
+    required this.color,
+    required this.center,
+    required this.polygon,
+    required this.minLat,
+    required this.maxLat,
+    required this.minLng,
+    required this.maxLng,
+  });
+
+  bool contains(LatLng p) =>
+      p.latitude >= minLat && p.latitude <= maxLat &&
+      p.longitude >= minLng && p.longitude <= maxLng;
+}
+
+// Detection order: smaller/more specific first to avoid swallowing by larger regions
+const _regions = [
+  _RegionConfig(
+    slug: 'middle-east', name: 'Middle East', emoji: '🕌',
+    color: Color(0xFF8B5CF6),
+    center: LatLng(27, 44),
+    polygon: [LatLng(42, 25), LatLng(42, 63), LatLng(12, 63), LatLng(12, 25)],
+    minLat: 12, maxLat: 42, minLng: 25, maxLng: 63,
+  ),
+  _RegionConfig(
+    slug: 'europe', name: 'Europe', emoji: '🏛️',
+    color: Color(0xFF3B82F6),
+    center: LatLng(52, 10),
+    polygon: [LatLng(71, -25), LatLng(71, 40), LatLng(35, 40), LatLng(35, -25)],
+    minLat: 35, maxLat: 71, minLng: -25, maxLng: 40,
+  ),
+  _RegionConfig(
+    slug: 'africa', name: 'Africa', emoji: '🌍',
+    color: Color(0xFFF59E0B),
+    center: LatLng(2, 20),
+    polygon: [LatLng(37, -18), LatLng(37, 52), LatLng(-35, 52), LatLng(-35, -18)],
+    minLat: -35, maxLat: 37, minLng: -18, maxLng: 52,
+  ),
+  _RegionConfig(
+    slug: 'asia', name: 'Asia', emoji: '🏯',
+    color: Color(0xFFEF4444),
+    center: LatLng(35, 105),
+    polygon: [LatLng(77, 63), LatLng(77, 145), LatLng(-10, 145), LatLng(-10, 63)],
+    minLat: -10, maxLat: 77, minLng: 63, maxLng: 145,
+  ),
+  _RegionConfig(
+    slug: 'americas', name: 'Americas', emoji: '🗽',
+    color: Color(0xFF10B981),
+    center: LatLng(10, -90),
+    polygon: [LatLng(73, -170), LatLng(73, -34), LatLng(-56, -34), LatLng(-56, -170)],
+    minLat: -56, maxLat: 73, minLng: -170, maxLng: -34,
+  ),
+  _RegionConfig(
+    slug: 'oceania', name: 'Oceania', emoji: '🦘',
+    color: Color(0xFF06B6D4),
+    center: LatLng(-25, 140),
+    polygon: [LatLng(10, 110), LatLng(10, 180), LatLng(-47, 180), LatLng(-47, 110)],
+    minLat: -47, maxLat: 10, minLng: 110, maxLng: 180,
+  ),
+];
+
+class _WorldMap extends StatefulWidget {
+  final bool isDark;
+  final Map<String, int> regionCounts;
+  final void Function(String slug, String name) onRegionTap;
+
+  const _WorldMap({
+    required this.isDark,
+    required this.regionCounts,
+    required this.onRegionTap,
+  });
+
+  @override
+  State<_WorldMap> createState() => _WorldMapState();
+}
+
+class _WorldMapState extends State<_WorldMap> {
+  String? _highlighted;
+
+  void _handleTap(LatLng point) {
+    for (final region in _regions) {
+      if (region.contains(point)) {
+        setState(() => _highlighted = region.slug);
+        Future.delayed(const Duration(milliseconds: 200),
+            () { if (mounted) setState(() => _highlighted = null); });
+        widget.onRegionTap(region.slug, region.name);
+        return;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: const LatLng(20, 10),
+              initialZoom: 1.5,
+              minZoom: 1.0,
+              maxZoom: 5.0,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+              ),
+              onTap: (_, latLng) => _handleTap(latLng),
+            ),
+            children: [
+              // Base OSM tile layer
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.nexus',
+                tileBuilder: widget.isDark ? _darkModeTileBuilder : null,
+              ),
+
+              // Region polygon overlays
+              PolygonLayer(
+                polygons: _regions.map((r) {
+                  final isHighlighted = _highlighted == r.slug;
+                  return Polygon(
+                    points: r.polygon,
+                    color: r.color.withOpacity(isHighlighted ? 0.45 : 0.22),
+                    borderStrokeWidth: isHighlighted ? 2.5 : 1.5,
+                    borderColor: r.color.withOpacity(isHighlighted ? 0.9 : 0.6),
+                  );
+                }).toList(),
+              ),
+
+              // Region badge markers
+              MarkerLayer(
+                markers: _regions.map((r) {
+                  final count = widget.regionCounts[r.slug] ?? 0;
+                  return Marker(
+                    point: r.center,
+                    width: 110,
+                    height: 58,
+                    child: GestureDetector(
+                      onTap: () => widget.onRegionTap(r.slug, r.name),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 108),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: r.color,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: r.color.withOpacity(0.5),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(r.emoji, style: const TextStyle(fontSize: 11)),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    count > 0 ? '$count' : r.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 108),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              r.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Dark-mode tile tint
+Widget _darkModeTileBuilder(BuildContext context, Widget tile, TileImage image) {
+  return ColorFiltered(
+    colorFilter: const ColorFilter.matrix([
+      -0.85, 0, 0, 0, 255,
+       0, -0.85, 0, 0, 255,
+       0, 0, -0.85, 0, 255,
+       0, 0,  0, 1, 0,
+    ]),
+    child: tile,
+  );
+}
+
+// ── Breaking news banner ──────────────────────────────────────────────────────
+
 class _BreakingNewsBanner extends StatefulWidget {
   final bool isDark;
   final List<String> titles;
-
   const _BreakingNewsBanner({required this.isDark, required this.titles});
 
   @override
@@ -378,16 +547,11 @@ class _BreakingNewsBanner extends StatefulWidget {
 class _BreakingNewsBannerState extends State<_BreakingNewsBanner> {
   int _index = 0;
 
-  void _next() {
-    if (widget.titles.isEmpty) return;
-    setState(() => _index = (_index + 1) % widget.titles.length);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final title = widget.titles.isNotEmpty ? widget.titles[_index] : '';
+    final title = widget.titles[_index];
     return GestureDetector(
-      onTap: _next,
+      onTap: () => setState(() => _index = (_index + 1) % widget.titles.length),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -400,45 +564,33 @@ class _BreakingNewsBannerState extends State<_BreakingNewsBanner> {
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(4),
-              ),
+              decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.bolt, color: Colors.white, size: 14),
                   SizedBox(width: 4),
                   Text('LIVE',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5)),
+                      style: TextStyle(color: Colors.white, fontSize: 11,
+                          fontWeight: FontWeight.w700, letterSpacing: 0.5)),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: widget.isDark
-                      ? NexusColors.darkTextPrimary
-                      : NexusColors.lightTextPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text(title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: widget.isDark ? NexusColors.darkTextPrimary : NexusColors.lightTextPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
             ),
             if (widget.titles.length > 1)
               Icon(Icons.chevron_right,
                   size: 16,
-                  color: widget.isDark
-                      ? NexusColors.darkTextSecondary
-                      : NexusColors.lightTextSecondary),
+                  color: widget.isDark ? NexusColors.darkTextSecondary : NexusColors.lightTextSecondary),
           ],
         ),
       ),
@@ -446,168 +598,8 @@ class _BreakingNewsBannerState extends State<_BreakingNewsBanner> {
   }
 }
 
-// Pixel positions on the 360-wide map container for each region slug
-const _regionPositions = {
-  'europe':      {'left': 60.0,  'top': 70.0},
-  'asia':        {'left': 200.0, 'top': 90.0},
-  'africa':      {'left': 100.0, 'top': 140.0},
-  'americas':    {'left': 280.0, 'top': 60.0},
-  'middle-east': {'left': 155.0, 'top': 115.0},
-  'oceania':     {'left': 255.0, 'top': 155.0},
-};
+// ── Article skeleton ──────────────────────────────────────────────────────────
 
-class _InteractiveMap extends StatelessWidget {
-  final bool isDark;
-  final Function(String) onCountryTap;
-  final List<_RegionData> regions;
-
-  const _InteractiveMap({
-    required this.isDark,
-    required this.onCountryTap,
-    required this.regions,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = DynamicColors(isDark);
-
-    // Build a lookup map slug → count from loaded regions
-    final countBySlug = {for (final r in regions) r.slug: r.articleCount};
-
-    // Default positions for the hotspots
-    final hotspots = _regionPositions.entries
-        .where((e) => (countBySlug[e.key] ?? 0) > 0 || regions.isEmpty)
-        .map((e) {
-      final regionName = regions.firstWhere(
-        (r) => r.slug == e.key,
-        orElse: () => _RegionData(
-          slug: e.key,
-          name: e.key[0].toUpperCase() + e.key.substring(1),
-          articleCount: 0,
-        ),
-      );
-      return (
-        slug: e.key,
-        name: regionName.name,
-        count: countBySlug[e.key] ?? 0,
-        left: e.value['left']!,
-        top: e.value['top']!,
-      );
-    }).toList();
-
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colors.border),
-      ),
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: isDark
-                      ? [const Color(0xFF1E1F24), const Color(0xFF141519)]
-                      : [const Color(0xFFE8E6E1), const Color(0xFFF7F5F0)],
-                ),
-              ),
-              child: Center(
-                child: Icon(Icons.public, size: 120,
-                    color: NexusColors.teal.withOpacity(0.2)),
-              ),
-            ),
-          ),
-          // Show hotspots only for regions with articles (or all if no data loaded yet)
-          for (final h in hotspots)
-            _MapHotspot(
-              left: h.left,
-              top: h.top,
-              label: h.name,
-              count: h.count,
-              isDark: isDark,
-              onTap: () => onCountryTap(h.name),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MapHotspot extends StatelessWidget {
-  final double left;
-  final double top;
-  final String label;
-  final int count;
-  final bool isDark;
-  final VoidCallback onTap;
-
-  const _MapHotspot({
-    required this.left,
-    required this.top,
-    required this.label,
-    required this.count,
-    required this.isDark,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: left,
-      top: top,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: NexusColors.teal,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: NexusColors.teal.withOpacity(0.4),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  count.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? NexusColors.darkTextPrimary
-                    : NexusColors.lightTextPrimary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Skeleton placeholder shown while trending articles are loading.
 class _ArticleSkeleton extends StatelessWidget {
   final bool isDark;
   const _ArticleSkeleton({required this.isDark});
@@ -626,26 +618,19 @@ class _ArticleSkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _shimmer(colors, height: 14, width: 80),
+          _sh(colors, h: 14, w: 80),
           const SizedBox(height: 12),
-          _shimmer(colors, height: 18, width: double.infinity),
+          _sh(colors, h: 18, w: double.infinity),
           const SizedBox(height: 6),
-          _shimmer(colors, height: 18, width: 200),
+          _sh(colors, h: 18, w: 200),
           const SizedBox(height: 12),
-          _shimmer(colors, height: 12, width: 120),
+          _sh(colors, h: 12, w: 120),
         ],
       ),
     );
   }
 
-  Widget _shimmer(DynamicColors colors, {required double height, required double width}) {
-    return Container(
-      height: height,
-      width: width,
-      decoration: BoxDecoration(
-        color: colors.muted,
-        borderRadius: BorderRadius.circular(4),
-      ),
-    );
-  }
+  Widget _sh(DynamicColors c, {required double h, required double w}) => Container(
+        height: h, width: w,
+        decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(4)));
 }

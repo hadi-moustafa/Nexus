@@ -42,7 +42,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$newspaper$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Newspaper$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/newspaper.js [app-client] (ecmascript) <export default as Newspaper>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$globe$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Globe$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/globe.js [app-client] (ecmascript) <export default as Globe>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trophy$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Trophy$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/trophy.js [app-client] (ecmascript) <export default as Trophy>");
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$sparkles$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Sparkles$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/sparkles.js [app-client] (ecmascript) <export default as Sparkles>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$puzzle$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__PuzzleIcon$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/puzzle.js [app-client] (ecmascript) <export default as PuzzleIcon>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$shield$2d$check$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__ShieldCheck$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/shield-check.js [app-client] (ecmascript) <export default as ShieldCheck>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$menu$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Menu$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/menu.js [app-client] (ecmascript) <export default as Menu>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$x$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__X$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/x.js [app-client] (ecmascript) <export default as X>");
@@ -81,9 +81,9 @@ const NAV_LINKS = [
         icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$trophy$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Trophy$3e$__["Trophy"]
     },
     {
-        href: "/digest",
-        label: "Digest",
-        icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$sparkles$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Sparkles$3e$__["Sparkles"]
+        href: "/crossword",
+        label: "Crossword",
+        icon: __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$puzzle$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__PuzzleIcon$3e$__["PuzzleIcon"]
     }
 ];
 function Navbar() {
@@ -2182,11 +2182,11 @@ function formatDate(iso) {
 }
 function StatusBadge(t0) {
     const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(7);
-    if ($[0] !== "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa") {
+    if ($[0] !== "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a") {
         for(let $i = 0; $i < 7; $i += 1){
             $[$i] = Symbol.for("react.memo_cache_sentinel");
         }
-        $[0] = "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa";
+        $[0] = "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a";
     }
     const { status } = t0;
     let t1;
@@ -2232,11 +2232,11 @@ function StatusBadge(t0) {
 _c = StatusBadge;
 function ToastBanner(t0) {
     const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(13);
-    if ($[0] !== "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa") {
+    if ($[0] !== "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a") {
         for(let $i = 0; $i < 13; $i += 1){
             $[$i] = Symbol.for("react.memo_cache_sentinel");
         }
-        $[0] = "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa";
+        $[0] = "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a";
     }
     const { toast, onDismiss } = t0;
     const t1 = `flex items-start gap-3 p-3.5 rounded-xl border text-sm mb-5 ${toast.type === "success" ? "border-green-400/40 bg-green-500/5 text-green-600" : "border-red-400/40 bg-red-500/5 text-red-500"}`;
@@ -2333,11 +2333,11 @@ function ToastBanner(t0) {
 _c1 = ToastBanner;
 function StatCard(t0) {
     const $ = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$compiler$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["c"])(11);
-    if ($[0] !== "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa") {
+    if ($[0] !== "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a") {
         for(let $i = 0; $i < 11; $i += 1){
             $[$i] = Symbol.for("react.memo_cache_sentinel");
         }
-        $[0] = "8cfdfdfa9d0a492da6aeb599037696acea9b99616876731b90a45e33c88c87fa";
+        $[0] = "6bd4b288bb500627b88e91cb05041f51a650129765acc289e1f5b1ec6e5a6b8a";
     }
     const { icon, label, value } = t0;
     let t1;
@@ -3771,7 +3771,7 @@ function ProfilePage() {
                                 }, this),
                                 /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                     className: "text-sm text-[var(--text-secondary)] mb-5",
-                                    children: "AI digest, double XP, unlimited bookmarks and more."
+                                    children: "Arabic feed, 2× XP, unlimited bookmarks and more."
                                 }, void 0, false, {
                                     fileName: "[project]/src/app/profile/page.tsx",
                                     lineNumber: 708,

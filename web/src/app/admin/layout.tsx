@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Users, Rss, MessageSquare, Pen, CreditCard, Trophy, BarChart2, Inbox, FileText } from "lucide-react";
+import { LayoutDashboard, Users, Rss, MessageSquare, Pen, CreditCard, Trophy, BarChart2, Inbox, FileText, ArrowLeft } from "lucide-react";
 import { requireAdminPage } from "@/lib/admin";
 
 const NAV = [
@@ -28,6 +28,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </Link>
 
         <nav className="flex flex-col gap-0.5">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 px-3 py-2 mb-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--muted)] hover:text-[var(--text-primary)] transition-colors border border-[var(--border)]"
+          >
+            <ArrowLeft size={16} />
+            Back to site
+          </Link>
           {NAV.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
@@ -43,6 +50,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-[var(--surface)] border-b border-[var(--border)] px-4 py-3 flex items-center gap-3 overflow-x-auto">
+        <Link
+          href="/"
+          className="shrink-0 flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors border border-[var(--border)] rounded-md px-2 py-1"
+        >
+          <ArrowLeft size={14} />
+          Site
+        </Link>
         {NAV.map(({ href, label, icon: Icon }) => (
           <Link
             key={href}
