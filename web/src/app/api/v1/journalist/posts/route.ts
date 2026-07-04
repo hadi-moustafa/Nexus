@@ -89,11 +89,11 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = createServiceClient();
 
-    const { data: userRow } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", auth.userId)
-      .single();
+    // Run role + journalist profile lookups in parallel — no dependency between them
+    const [{ data: userRow }, { data: journalistRow }] = await Promise.all([
+      supabase.from("users").select("role").eq("id", auth.userId).single(),
+      supabase.from("journalists").select("id, name, avatar_url, is_verified").eq("user_id", auth.userId).single(),
+    ]);
 
     if (!userRow || !["journalist", "admin"].includes(userRow.role as string)) {
       return NextResponse.json(
@@ -101,12 +101,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-
-    const { data: journalistRow } = await supabase
-      .from("journalists")
-      .select("id")
-      .eq("user_id", auth.userId)
-      .single();
 
     if (!journalistRow) {
       return NextResponse.json(
@@ -140,20 +134,39 @@ export async function POST(request: NextRequest) {
 
     void logAction("journalist_post_created", auth.userId, { postId: data.id, title: data.title }, request);
 
-    // Auto-award prolific badge if 50+ posts
-    const { count } = await supabase
-      .from("journalist_posts")
-      .select("id", { count: "exact", head: true })
-      .eq("journalist_id", journalistRow.id);
+    // Award prolific badge (50+ posts) fire-and-forget — not in the critical path
+    void (async () => {
+      const { count } = await supabase
+        .from("journalist_posts")
+        .select("id", { count: "exact", head: true })
+        .eq("journalist_id", journalistRow.id);
+      if ((count ?? 0) >= 50) {
+        await supabase.from("journalist_badges").upsert(
+          { journalist_id: journalistRow.id, badge_type: "prolific" },
+          { onConflict: "journalist_id,badge_type", ignoreDuplicates: true }
+        );
+      }
+    })();
 
-    if ((count ?? 0) >= 50) {
-      await supabase.from("journalist_badges").upsert(
-        { journalist_id: journalistRow.id, badge_type: "prolific" },
-        { onConflict: "journalist_id,badge_type", ignoreDuplicates: true }
-      );
-    }
+    // Map to camelCase so the Flutter JournalistPost.fromJson model can parse it
+    const post = {
+      id: data.id as string,
+      journalistId: data.journalist_id as string,
+      journalistName: (journalistRow.name as string | null) ?? "Unknown",
+      journalistAvatarUrl: (journalistRow.avatar_url as string | null) ?? null,
+      isVerified: (journalistRow.is_verified as boolean) ?? false,
+      title: data.title as string,
+      body: data.body as string,
+      imageUrl: (data.image_url as string | null) ?? null,
+      category: (data.category as string) ?? "general",
+      viewCount: (data.view_count as number) ?? 0,
+      commentCount: (data.comment_count as number) ?? 0,
+      reactionCount: (data.reaction_count as number) ?? 0,
+      createdAt: data.created_at as string,
+      updatedAt: data.updated_at as string,
+    };
 
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data: post }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/v1/journalist/posts]", err);
     return NextResponse.json(

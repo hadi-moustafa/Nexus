@@ -42,12 +42,16 @@ export async function POST(request: NextRequest) {
 
     // Prevent double-submission: one quiz per user per calendar day
     const today = new Date().toISOString().slice(0, 10);
+    const nextDay = new Date(today);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDayStr = nextDay.toISOString().slice(0, 10);
+
     const { data: existing } = await supabase
       .from("quiz_results")
       .select("id")
       .eq("user_id", auth.userId)
       .gte("completed_at", `${today}T00:00:00.000Z`)
-      .lt("completed_at", `${today}T23:59:59.999Z`)
+      .lt("completed_at", `${nextDayStr}T00:00:00.000Z`)
       .maybeSingle();
 
     if (existing) {

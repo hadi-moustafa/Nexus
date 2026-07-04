@@ -69,13 +69,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { articles, nextCursor } = await getArticles({
+    let { articles, nextCursor } = await getArticles({
       limit,
       cursor,
       category: categoryParam,
       language: languageParam,
       topics,
     });
+
+    // "For You" personalisation returned nothing — fall back to the full feed so
+    // the tab never appears empty on a fresh install or sparse DB.
+    if (articles.length === 0 && topics && topics.length > 0 && !categoryParam && !languageParam && !cursor) {
+      ({ articles, nextCursor } = await getArticles({ limit, cursor }));
+    }
 
     return Response.json({ data: articles, meta: { nextCursor } });
   } catch (err) {

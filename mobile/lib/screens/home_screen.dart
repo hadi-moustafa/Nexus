@@ -6,9 +6,11 @@ import '../widgets/article_card.dart';
 import '../models/article.dart';
 import '../services/articles_service.dart';
 import '../services/api_client.dart';
+import '../services/notification_service.dart';
 import '../utils/time_utils.dart';
 import 'article_screen.dart';
 import 'country_panel.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool isDark;
@@ -96,6 +98,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _showNotificationsPopup(BuildContext context, DynamicColors colors) async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (sheetContext) => _NotificationsPopup(isDark: widget.isDark, colors: colors),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = DynamicColors(widget.isDark);
@@ -147,9 +161,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     onPressed: widget.onToggleTheme,
                   ),
-                  IconButton(
-                    icon: Icon(Icons.notifications_outlined, color: colors.textPrimary),
-                    onPressed: () {},
+                  ValueListenableBuilder<int>(
+                    valueListenable: NotificationService.instance.unreadCount,
+                    builder: (_, count, __) => Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.notifications_outlined, color: colors.textPrimary),
+                          onPressed: () => _showNotificationsPopup(context, colors),
+                        ),
+                        if (count > 0)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: colors.background, width: 1.5),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -633,4 +669,150 @@ class _ArticleSkeleton extends StatelessWidget {
   Widget _sh(DynamicColors c, {required double h, required double w}) => Container(
         height: h, width: w,
         decoration: BoxDecoration(color: c.muted, borderRadius: BorderRadius.circular(4)));
+}
+
+// ── Notifications popup (bell icon) ───────────────────────────────────────────
+
+class _NotificationsPopup extends StatefulWidget {
+  final bool isDark;
+  final DynamicColors colors;
+  const _NotificationsPopup({required this.isDark, required this.colors});
+
+  @override
+  State<_NotificationsPopup> createState() => _NotificationsPopupState();
+}
+
+class _NotificationsPopupState extends State<_NotificationsPopup> {
+  List<AppNotification> _items = [];
+  bool _loading = true;
+
+  static const _maxShown = 6;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final result = await NotificationService.instance.fetchPage();
+      if (mounted) setState(() { _items = result.items; _loading = false; });
+      // Opening the popup counts as having seen the latest notifications.
+      NotificationService.instance.markAllRead();
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: colors.border, borderRadius: BorderRadius.circular(2)),
+            ),
+            Row(
+              children: [
+                Text('Notifications',
+                    style: TextStyle(
+                      fontFamily: 'Fraunces',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    )),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => NotificationsScreen(isDark: widget.isDark),
+                    ));
+                  },
+                  child: Text('See all',
+                      style: TextStyle(color: NexusColors.teal, fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator(color: NexusColors.teal, strokeWidth: 2)),
+              )
+            else if (_items.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Text('No notifications yet.',
+                    style: TextStyle(fontSize: 14, color: colors.textSecondary)),
+              )
+            else
+              ..._items.take(_maxShown).map((n) => _PopupTile(item: n, colors: colors)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PopupTile extends StatelessWidget {
+  final AppNotification item;
+  final DynamicColors colors;
+  const _PopupTile({required this.item, required this.colors});
+
+  (IconData, Color) get _meta => switch (item.type) {
+        'new_comment' => (Icons.chat_bubble_rounded, const Color(0xFF7C83FF)),
+        'new_reaction' => (Icons.favorite_rounded, Colors.redAccent),
+        'new_post' => (Icons.newspaper_rounded, NexusColors.teal),
+        'subscription_activated' => (Icons.workspace_premium_rounded, Colors.amber),
+        'subscription_canceled' => (Icons.cancel_outlined, Colors.redAccent),
+        'bookmark_added' => (Icons.bookmark_rounded, NexusColors.teal),
+        _ => (Icons.notifications_rounded, NexusColors.teal),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, iconColor) = _meta;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(color: iconColor.withOpacity(0.12), shape: BoxShape.circle),
+            child: Icon(icon, size: 16, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.title,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.textPrimary)),
+                if (item.body != null && item.body!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(item.body!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: colors.textSecondary)),
+                ],
+                const SizedBox(height: 2),
+                Text(timeAgo(item.createdAt), style: TextStyle(fontSize: 11, color: colors.textSecondary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

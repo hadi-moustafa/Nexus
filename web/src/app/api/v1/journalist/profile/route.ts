@@ -34,20 +34,25 @@ export async function GET(request: NextRequest) {
 
     const { data: posts } = await supabase
       .from("journalist_posts")
-      .select("id, title, image_url, category, comment_count, reaction_count, view_count, created_at")
+      .select("id, title, body, image_url, category, comment_count, reaction_count, view_count, created_at, updated_at")
       .eq("journalist_id", journalistRow.id)
       .order("created_at", { ascending: false })
       .limit(20);
 
     const rawBadges = journalistRow.journalist_badges as unknown as Array<Record<string, unknown>> ?? [];
 
+    const jId = journalistRow.id as string;
+    const jName = journalistRow.name as string;
+    const jAvatar = (journalistRow.avatar_url as string | null) ?? null;
+    const jVerified = journalistRow.is_verified as boolean;
+
     return NextResponse.json({
       data: {
-        id: journalistRow.id as string,
-        name: journalistRow.name as string,
+        id: jId,
+        name: jName,
         bio: (journalistRow.bio as string | null) ?? null,
-        avatarUrl: (journalistRow.avatar_url as string | null) ?? null,
-        isVerified: journalistRow.is_verified as boolean,
+        avatarUrl: jAvatar,
+        isVerified: jVerified,
         followerCount: journalistRow.follower_count as number,
         postCount: journalistRow.post_count as number,
         badges: rawBadges.map((b) => ({
@@ -57,13 +62,19 @@ export async function GET(request: NextRequest) {
         })),
         recentPosts: (posts ?? []).map((p) => ({
           id: p.id as string,
+          journalistId: jId,
+          journalistName: jName,
+          journalistAvatarUrl: jAvatar,
+          isVerified: jVerified,
           title: p.title as string,
+          body: (p.body as string) ?? "",
           imageUrl: (p.image_url as string | null) ?? null,
           category: (p.category as string) ?? "general",
           commentCount: (p.comment_count as number) ?? 0,
           reactionCount: (p.reaction_count as number) ?? 0,
           viewCount: (p.view_count as number) ?? 0,
           createdAt: p.created_at as string,
+          updatedAt: (p.updated_at as string) ?? (p.created_at as string),
         })),
       },
     });

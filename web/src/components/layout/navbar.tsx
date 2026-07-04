@@ -11,6 +11,50 @@ import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 
+// ── Persistent bfcache guard ────────────────────────────────────────────────
+// This MUST live at module scope, not inside a React component.
+//
+// Problem: React's useEffect cleanup removes the `pageshow` listener when
+// the component unmounts (which happens on window.location.replace('/login')).
+// When bfcache thaws the page on Back, the listener is already gone, so the
+// stale authenticated page is shown to a logged-out user.
+//
+// Solution: register once at module level and never clean it up. The module
+// variable `_installed` ensures we don't stack duplicate listeners across
+// React hot-reloads or client-side re-mounts.
+//
+// Chrome note: since ~2023 Chrome may store `Cache-Control: no-store` pages
+// in bfcache anyway, making the server-side no-store header insufficient on
+// its own. This listener is the only reliable client-side defence.
+let _bfcacheGuardInstalled = false;
+
+function installBfcacheGuard() {
+  if (typeof window === "undefined" || _bfcacheGuardInstalled) return;
+  _bfcacheGuardInstalled = true;
+
+  const check = () => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!data.user && !window.location.pathname.startsWith("/login")) {
+          window.location.replace("/login");
+        }
+      });
+  };
+
+  // pageshow fires when bfcache thaws a page (event.persisted === true)
+  window.addEventListener("pageshow", (e: PageTransitionEvent) => {
+    if (e.persisted) check();
+  });
+
+  // visibilitychange / focus catch Alt-Tab back or switching tabs —
+  // secondary defence in case pageshow alone is insufficient.
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") check();
+  });
+  window.addEventListener("focus", check);
+}
+
 const NAV_LINKS = [
   { href: "/",           label: "Home",      icon: Globe },
   { href: "/feed",       label: "Feed",      icon: Newspaper },
@@ -31,6 +75,11 @@ export function Navbar() {
 
   useEffect(() => {
     setMounted(true);
+
+    // Install the bfcache / tab-switch guard once for the entire session.
+    // Must be called inside useEffect (client-only), not at module evaluation time.
+    installBfcacheGuard();
+
     const supabase = createClient();
 
     supabase.auth.getUser().then(({ data }) => {
@@ -50,6 +99,8 @@ export function Navbar() {
 
     return () => {
       subscription.unsubscribe();
+      // Note: bfcache guard listeners are intentionally NOT removed here.
+      // They must survive this cleanup so bfcache-thawed pages are still guarded.
       window.removeEventListener("scroll", onScroll);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,12 +114,16 @@ export function Navbar() {
   };
 
   const handleSignOut = async () => {
+    // Server signout MUST come first — it needs a valid session cookie to run
+    // requireAuth, log the action, and revoke DB sessions. Calling the client
+    // signOut() first invalidates the token, making the server call return 401.
     await fetch("/api/v1/auth/signout", { method: "POST" });
-    setUser(null);
-    setIsAdmin(false);
-    setMobileOpen(false);
-    router.push("/login");
-    router.refresh();
+    // Now clear the browser-side session (in-memory tokens + localStorage).
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    // Hard redirect via replace() so the logout page overwrites the current
+    // history entry — pressing Back from /login has nowhere in the app to go.
+    window.location.replace("/login");
   };
 
   const isActive = (href: string) =>

@@ -3,6 +3,7 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  allowedDevOrigins: ['192.168.2.109'],
   // Move the Turbopack dev cache to /tmp (tmpfs / RAM) to avoid the
   // "Slow filesystem detected" warning on LUKS-encrypted or network drives.
   distDir: process.env.NODE_ENV === "development"

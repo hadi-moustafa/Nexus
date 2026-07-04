@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { stripe } from "@/lib/stripe";
 import { requireAuth } from "@/lib/auth";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * POST /api/v1/stripe/verify-session
@@ -66,6 +67,15 @@ export async function POST(request: NextRequest) {
     // Use service client — this is a trusted server-side write, RLS must not block it.
     const supabase = createServiceClient();
 
+    // Read prior status first so we only notify on a fresh activation, not
+    // every time the client re-confirms an already-active subscription.
+    const { data: priorSub } = await supabase
+      .from("subscriptions")
+      .select("status")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+    const wasActive = priorSub?.status === "active";
+
     // Upsert subscription row — plan enum is "premium", not the billing interval
     const { error: upsertErr } = await supabase.from("subscriptions").upsert(
       {
@@ -83,6 +93,15 @@ export async function POST(request: NextRequest) {
     );
 
     if (upsertErr) throw upsertErr;
+
+    if (!wasActive) {
+      void createNotification(
+        auth.userId,
+        "subscription_activated",
+        "Welcome to Nexus Premium",
+        "Your subscription is now active. Enjoy unlimited bookmarks and 2x quiz XP."
+      );
+    }
 
     return NextResponse.json({
       data: {

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { plan, successUrl: customSuccessUrl, cancelUrl: customCancelUrl } = await request.json() as { plan: PlanKey; successUrl?: string; cancelUrl?: string };
+    const { plan } = await request.json() as { plan: PlanKey };
 
     if (!plan || !(plan in PLANS)) {
       return NextResponse.json(
@@ -59,15 +59,28 @@ export async function POST(request: NextRequest) {
       customerId = customer.id;
     }
 
-    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_APP_URL ?? "";
+    // Mobile requests (Bearer token) have no browser Origin header, so always
+    // use NEXT_PUBLIC_APP_URL — a network-accessible URL the phone's browser
+    // can actually reach.  Web requests use the request origin as usual.
+    const isMobile = request.headers.get("authorization")?.startsWith("Bearer ");
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+    const webOrigin = request.headers.get("origin")?.replace(/\/$/, "") ?? appUrl;
+    const baseUrl = isMobile ? appUrl : webOrigin;
+
+    const successUrl = isMobile
+      ? `${baseUrl}/payment-callback?status=success&session_id={CHECKOUT_SESSION_ID}`
+      : `${baseUrl}/premium?success=true&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = isMobile
+      ? `${baseUrl}/payment-callback?status=canceled`
+      : `${baseUrl}/premium?canceled=true`;
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [{ price: planConfig.priceId, quantity: 1 }],
-      success_url: customSuccessUrl ?? `${origin}/premium?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: customCancelUrl ?? `${origin}/premium?canceled=true`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: { nexus_user_id: auth.userId, plan },
       subscription_data: {
         metadata: { nexus_user_id: auth.userId, plan },

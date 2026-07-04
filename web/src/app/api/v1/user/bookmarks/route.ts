@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 import { logAction } from "@/lib/audit";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * GET /api/v1/user/bookmarks
@@ -157,6 +158,12 @@ export async function POST(request: NextRequest) {
     }
 
     void logAction("bookmark_added", auth.userId, { articleId }, request);
+    void createNotification(
+      auth.userId,
+      "bookmark_added",
+      "Article bookmarked",
+      "Saved to your bookmarks for later."
+    );
     return NextResponse.json(
       { data: { id: data.id, articleId: data.article_id, createdAt: data.created_at } },
       { status: 201 }

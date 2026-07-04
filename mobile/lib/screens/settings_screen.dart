@@ -101,18 +101,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         content: Text(
           'Are you sure you want to sign out?',
           style: TextStyle(
-            color: widget.isDark
-                ? Colors.white70
-                : Colors.black54,
+            color: widget.isDark ? Colors.white70 : Colors.black54,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: NexusColors.teal),
-            ),
+            child: Text('Cancel', style: TextStyle(color: NexusColors.teal)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -127,11 +122,141 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() => _signingOut = true);
     try {
       await AuthService.instance.signOut();
-      if (mounted) widget.onSignOut();
+      if (mounted) {
+        // Pop all pushed routes so the root updates to LoginScreen.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        widget.onSignOut();
+      }
     } catch (_) {
-      if (mounted) _showSnack('Sign out failed');
-      setState(() => _signingOut = false);
+      if (mounted) {
+        _showSnack('Sign out failed');
+        setState(() => _signingOut = false);
+      }
     }
+  }
+
+  void _showPrivacyPolicy() {
+    _showTextDialog(
+      title: 'Privacy Policy',
+      content: '''Nexus respects your privacy. Here is how we handle your information.
+
+INFORMATION WE COLLECT
+• Account details you provide: email address and display name.
+• Usage data: articles read, quiz scores, reactions, bookmarks, and streak activity used to personalise your experience.
+• Device information (OS version, app version) for troubleshooting purposes only.
+
+HOW WE USE IT
+Your data powers your personalised news feed, tracks your quiz streak and leaderboard rank, and lets you save articles. We do not sell or rent your personal data to third parties.
+
+DATA STORAGE & SECURITY
+All data is stored on Supabase-managed servers with encryption in transit (TLS) and at rest. Access is restricted to authorised services only.
+
+YOUR RIGHTS
+You may update your display name at any time in Settings. To permanently delete your account and all associated data, contact us at balhashawraa4@gmail.com.
+
+CHANGES TO THIS POLICY
+We may update this policy as the app evolves. Continued use of Nexus after changes constitutes acceptance of the updated policy.
+
+Last updated: July 2026''',
+    );
+  }
+
+  void _showTermsOfService() {
+    _showTextDialog(
+      title: 'Terms of Service',
+      content: '''By using Nexus you agree to the following terms.
+
+1. ACCOUNT RESPONSIBILITY
+You are responsible for keeping your login credentials confidential. You must not share your account or impersonate other users.
+
+2. ACCEPTABLE USE
+You agree not to post content that is illegal, hateful, defamatory, or misleading. Violations may result in account suspension or permanent removal.
+
+3. JOURNALIST CONTENT
+Journalists approved by Nexus may publish posts. All published content must be original and factual. Nexus reserves the right to remove content that violates our standards without notice.
+
+4. PREMIUM SUBSCRIPTION
+Premium features are available via monthly or annual subscription. Subscriptions renew automatically unless cancelled before the renewal date. No refunds are issued for partial billing periods.
+
+5. INTELLECTUAL PROPERTY
+The Nexus name, logo, and original content are protected by copyright. You may not reproduce or redistribute them without written permission.
+
+6. LIMITATION OF LIABILITY
+Nexus is provided "as is." We make no warranties regarding uptime, accuracy, or content availability. We are not liable for any direct or indirect loss arising from use of the app.
+
+7. GOVERNING LAW
+These terms are governed by the laws of Lebanon.
+
+8. UPDATES
+We may revise these terms at any time. Your continued use of Nexus constitutes acceptance of the latest version.
+
+Last updated: July 2026''',
+    );
+  }
+
+  void _showTextDialog({required String title, required String content}) {
+    final colors = DynamicColors(widget.isDark);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: widget.isDark ? const Color(0xFF1E2130) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontFamily: 'Fraunces',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: colors.border),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  content,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: colors.textPrimary,
+                    height: 1.7,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Close', style: TextStyle(color: NexusColors.teal)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSnack(String msg) {
@@ -579,6 +704,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         label: 'Privacy Policy',
                         trailing: Icon(Icons.chevron_right_rounded,
                             color: colors.textSecondary, size: 20),
+                        onTap: _showPrivacyPolicy,
                       ),
                       _divider(colors),
                       _Row(
@@ -588,6 +714,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         label: 'Terms of Service',
                         trailing: Icon(Icons.chevron_right_rounded,
                             color: colors.textSecondary, size: 20),
+                        onTap: _showTermsOfService,
                       ),
                     ],
                   ),

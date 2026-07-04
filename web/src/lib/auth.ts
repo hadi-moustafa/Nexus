@@ -6,6 +6,10 @@ import { createServiceClient } from "@/lib/supabase/server";
 export interface AuthUser {
   userId: string;
   email: string | undefined;
+  /** Raw Supabase user_metadata (display name, avatar from OAuth providers) */
+  userMetadata: Record<string, unknown>;
+  /** Raw Supabase app_metadata (provider, roles set by the auth server) */
+  appMetadata: Record<string, unknown>;
 }
 
 /**
@@ -35,7 +39,13 @@ export async function requireAuth(
     const supabase = createServiceClient();
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) return unauthorized("Invalid or expired token");
-    return { userId: data.user.id, email: data.user.email };
+    const u = data.user;
+    return {
+      userId: u.id,
+      email: u.email,
+      userMetadata: (u.user_metadata ?? {}) as Record<string, unknown>,
+      appMetadata: (u.app_metadata ?? {}) as Record<string, unknown>,
+    };
   }
 
   // ── Web: cookie-based session via @supabase/ssr ───────────────────────────
@@ -64,7 +74,12 @@ export async function requireAuth(
 
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) return unauthorized();
-    return { userId: user.id, email: user.email };
+    return {
+      userId: user.id,
+      email: user.email,
+      userMetadata: (user.user_metadata ?? {}) as Record<string, unknown>,
+      appMetadata: (user.app_metadata ?? {}) as Record<string, unknown>,
+    };
   } catch {
     return unauthorized();
   }

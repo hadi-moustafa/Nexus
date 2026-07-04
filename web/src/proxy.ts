@@ -3,8 +3,6 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 /**
  * CORS headers for /api/* routes.
- * Allows any localhost origin (Flutter Web dev, web dashboard dev).
- * In production, restrict this to your deployed app domains.
  */
 function getCorsHeaders(request: NextRequest): Record<string, string> {
   const origin = request.headers.get("origin") ?? "";
@@ -23,10 +21,27 @@ function getCorsHeaders(request: NextRequest): Record<string, string> {
   };
 }
 
+/** Replace the dev-server bind address with a real browser-navigable hostname. */
+function safeUrl(request: NextRequest, path: string): URL {
+  const base = request.url.replace("//0.0.0.0:", "//localhost:");
+  return new URL(path, base);
+}
+
+// Pages that do not require a session.
+// /payment-callback is public because the phone's browser has no session cookie
+// after returning from Stripe — it just needs to fire the deep link.
+const PUBLIC_PATHS = ["/login", "/payment-callback"];
+
+function isPublic(pathname: string) {
+  return PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Handle CORS preflight — must respond before any other logic
+  // 1. CORS preflight — respond before any other logic
   if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
     return new NextResponse(null, {
       status: 204,
@@ -34,41 +49,32 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  // 2. Refresh the Supabase session cookie for web routes only.
-  // API routes use Bearer token auth — skip the cookie refresh to avoid
-  // blocking every mobile request on a Supabase network call.
+  // 2. API routes use Bearer token auth — skip cookie session refresh
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
-  const response = await updateSession(request);
 
-  // 3. Attach CORS headers to every API response so the browser allows it
-  if (pathname.startsWith("/api/")) {
-    const cors = getCorsHeaders(request);
-    for (const [key, value] of Object.entries(cors)) {
-      response.headers.set(key, value);
-    }
+  // 3. Refresh the Supabase session cookie on every page request.
+  //    updateSession calls supabase.auth.getUser() once and returns both the
+  //    response (with refreshed cookies) and the user — no second round-trip.
+  const { response, user } = await updateSession(request);
+
+  // 4. Prevent bfcache from storing any page.
+  //    Without no-store, pressing Back after logout restores a frozen
+  //    in-memory snapshot without hitting the server, bypassing auth entirely.
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+
+  // Authenticated user hitting /login → send to home
+  if (user && pathname === "/login") {
+    return NextResponse.redirect(safeUrl(request, "/"));
   }
 
-  // 4. If authenticated user hits /login, redirect home
-  if (pathname === "/login") {
-    const { createServerClient } = await import("@supabase/ssr");
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
-      {
-        cookies: {
-          getAll: () => request.cookies.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      return NextResponse.redirect(new URL("/feed", request.url));
-    }
+  // Unauthenticated user on any non-public page → send to login
+  if (!user && !isPublic(pathname)) {
+    const loginUrl = safeUrl(request, "/login");
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;

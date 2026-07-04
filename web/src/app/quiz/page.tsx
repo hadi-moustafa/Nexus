@@ -151,14 +151,27 @@ export default function QuizPage() {
             body: JSON.stringify({ quizId: dailyQuiz.id, answers: answers.map((a) => a ?? -1) }),
           });
           if (res.status === 401) { router.push("/"); return; }
-          const { data } = await res.json();
-          setDailyResult(data);
-          if (data?.isPerfect) setMascot("excited", "PERFECT SCORE! You're unstoppable!");
-          else if (data?.score >= data?.total / 2) setMascot("happy", "Great job! Keep it up!");
+          // 409 = already submitted today (alreadyCompleted check in /today was
+          // bypassed somehow, e.g. stale client state). Show the done screen.
+          if (res.status === 409) {
+            setMascot("happy", "You already completed today's quiz!");
+            setMode("daily-done");
+            return;
+          }
+          const json = await res.json();
+          if (!json.data) {
+            setMascot("sad", "Something went wrong. Try again later!");
+            setMode("hub");
+            return;
+          }
+          setDailyResult(json.data);
+          if (json.data.isPerfect) setMascot("excited", "PERFECT SCORE! You're unstoppable!");
+          else if (json.data.score >= json.data.total / 2) setMascot("happy", "Great job! Keep it up!");
           else setMascot("sad", "Don't worry — practice makes perfect!");
           setMode("daily-result");
         } catch {
-          setMode("daily-result");
+          setMascot("sad", "Couldn't submit. Check your connection!");
+          setMode("hub");
         } finally {
           setDailySubmitting(false);
         }

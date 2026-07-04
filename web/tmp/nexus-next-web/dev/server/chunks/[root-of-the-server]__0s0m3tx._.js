@@ -105,9 +105,13 @@ const updateSession = async (request)=>{
             }
         }
     });
-    // Refresh the session — do not remove this line
-    await supabase.auth.getUser();
-    return supabaseResponse;
+    // getUser() validates the JWT with Supabase and refreshes the token if
+    // needed. Must not be removed — this is what keeps the session alive.
+    const { data: { user } } = await supabase.auth.getUser();
+    return {
+        response: supabaseResponse,
+        user
+    };
 };
 }),
 "[project]/src/proxy.ts [middleware] (ecmascript)", ((__turbopack_context__) => {
@@ -125,8 +129,6 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$mi
 ;
 /**
  * CORS headers for /api/* routes.
- * Allows any localhost origin (Flutter Web dev, web dashboard dev).
- * In production, restrict this to your deployed app domains.
  */ function getCorsHeaders(request) {
     const origin = request.headers.get("origin") ?? "";
     const isLocalhost = origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
@@ -138,42 +140,51 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$mi
         "Access-Control-Max-Age": "86400"
     };
 }
+/** Replace the dev-server bind address with a real browser-navigable hostname. */ function safeUrl(request, path) {
+    const base = request.url.replace("//0.0.0.0:", "//localhost:");
+    return new URL(path, base);
+}
+// Pages that do not require a session.
+// /payment-callback is public because the phone's browser has no session cookie
+// after returning from Stripe — it just needs to fire the deep link.
+const PUBLIC_PATHS = [
+    "/login",
+    "/payment-callback"
+];
+function isPublic(pathname) {
+    return PUBLIC_PATHS.some((p)=>pathname === p || pathname.startsWith(p + "/"));
+}
 async function proxy(request) {
     const { pathname } = request.nextUrl;
-    // 1. Handle CORS preflight — must respond before any other logic
+    // 1. CORS preflight — respond before any other logic
     if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
         return new __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"](null, {
             status: 204,
             headers: getCorsHeaders(request)
         });
     }
-    // 2. Refresh the Supabase session cookie for web routes only.
-    // API routes use Bearer token auth — skip the cookie refresh to avoid
-    // blocking every mobile request on a Supabase network call.
+    // 2. API routes use Bearer token auth — skip cookie session refresh
     if (pathname.startsWith("/api/")) {
         return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].next();
     }
-    const response = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$middleware$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["updateSession"])(request);
-    // 3. Attach CORS headers to every API response so the browser allows it
-    if (pathname.startsWith("/api/")) {
-        const cors = getCorsHeaders(request);
-        for (const [key, value] of Object.entries(cors)){
-            response.headers.set(key, value);
-        }
+    // 3. Refresh the Supabase session cookie on every page request.
+    //    updateSession calls supabase.auth.getUser() once and returns both the
+    //    response (with refreshed cookies) and the user — no second round-trip.
+    const { response, user } = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$middleware$2e$ts__$5b$middleware$5d$__$28$ecmascript$29$__["updateSession"])(request);
+    // 4. Prevent bfcache from storing any page.
+    //    Without no-store, pressing Back after logout restores a frozen
+    //    in-memory snapshot without hitting the server, bypassing auth entirely.
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+    // Authenticated user hitting /login → send to home
+    if (user && pathname === "/login") {
+        return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].redirect(safeUrl(request, "/"));
     }
-    // 4. If authenticated user hits /login, redirect home
-    if (pathname === "/login") {
-        const { createServerClient } = await __turbopack_context__.A("[project]/node_modules/@supabase/ssr/dist/module/index.js [middleware] (ecmascript, async loader)");
-        const supabase = createServerClient(("TURBOPACK compile-time value", "https://gfbcwqeocdrzbyaenlnh.supabase.co"), ("TURBOPACK compile-time value", "sb_publishable_-m1X2AYSipLmAQ5OYafaDA_ruIVwSR6"), {
-            cookies: {
-                getAll: ()=>request.cookies.getAll(),
-                setAll: ()=>{}
-            }
-        });
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].redirect(new URL("/feed", request.url));
-        }
+    // Unauthenticated user on any non-public page → send to login
+    if (!user && !isPublic(pathname)) {
+        const loginUrl = safeUrl(request, "/login");
+        loginUrl.searchParams.set("next", pathname);
+        return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$middleware$5d$__$28$ecmascript$29$__["NextResponse"].redirect(loginUrl);
     }
     return response;
 }

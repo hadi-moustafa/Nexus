@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import '../models/article.dart';
 import 'api_client.dart';
 
+// Valid reaction types — must match the DB check constraint after migration.
+const kReactionTypes = ['like', 'love', 'wow', 'sad', 'angry'];
+const kReactionEmojis = {'like': '👍', 'love': '❤️', 'wow': '😮', 'sad': '😢', 'angry': '😡'};
+
 const _tag = '[ArticlesService]';
 
 class ArticlesService {
@@ -101,6 +105,64 @@ class ArticlesService {
         await ApiClient.instance.get('/search', queryParameters: params);
     return _parsePage(response.data);
   }
+
+  // ── Reactions ──────────────────────────────────────────────────────────────
+
+  Future<({Map<String, int> counts, String? myReaction})> fetchReactions(
+      String articleId) async {
+    final response =
+        await ApiClient.instance.get('/articles/$articleId/reactions');
+    final data = response.data['data'] as Map<String, dynamic>;
+    final rawCounts =
+        (data['counts'] as Map<String, dynamic>?) ?? {};
+    final counts = rawCounts.map((k, v) => MapEntry(k, (v as num).toInt()));
+    return (counts: counts, myReaction: data['myReaction'] as String?);
+  }
+
+  Future<void> addReaction(String articleId, String type) async {
+    await ApiClient.instance.post(
+      '/articles/$articleId/reactions',
+      data: {'type': type},
+    );
+  }
+
+  Future<void> removeReaction(String articleId) async {
+    await ApiClient.instance.delete('/articles/$articleId/reactions');
+  }
+
+  // ── Comments ───────────────────────────────────────────────────────────────
+
+  Future<({List<ArticleComment> comments, String? nextCursor})> fetchComments(
+      String articleId, {int limit = 10, String? cursor}) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (cursor != null) params['cursor'] = cursor;
+    final response = await ApiClient.instance
+        .get('/articles/$articleId/comments', queryParameters: params);
+    final data = response.data['data'] as List<dynamic>;
+    final meta = response.data['meta'] as Map<String, dynamic>?;
+    return (
+      comments: data
+          .map((e) => ArticleComment.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      nextCursor: meta?['nextCursor'] as String?,
+    );
+  }
+
+  Future<ArticleComment> postComment(String articleId, String body) async {
+    final response = await ApiClient.instance.post(
+      '/articles/$articleId/comments',
+      data: {'body': body},
+    );
+    return ArticleComment.fromJson(
+        response.data['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteComment(String articleId, String commentId) async {
+    await ApiClient.instance
+        .delete('/articles/$articleId/comments/$commentId');
+  }
+
+  // ── Internal ───────────────────────────────────────────────────────────────
 
   ({List<Article> articles, String? nextCursor}) _parsePage(
       Map<String, dynamic> body) {

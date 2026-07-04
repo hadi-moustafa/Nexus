@@ -136,7 +136,10 @@ class _JournalistStudioScreenState extends State<JournalistStudioScreen> {
   Widget build(BuildContext context) {
     final colors = DynamicColors(widget.isDark);
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    // Total clearance needed at the bottom of scrollable content:
+    //   system inset (home indicator) + nav bar (~64px + 12px gap) + FAB (~56px) + gap
+    final systemInset = MediaQuery.of(context).padding.bottom;
+    final bottomClearance = systemInset + 148.0;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -305,7 +308,7 @@ class _JournalistStudioScreenState extends State<JournalistStudioScreen> {
                       if (_profile!.recentPosts.isEmpty)
                         SliverToBoxAdapter(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            padding: EdgeInsets.fromLTRB(0, 40, 0, bottomClearance),
                             child: Column(
                               children: [
                                 OwlMascot(size: 80, mood: OwlMood.thinking),
@@ -331,7 +334,7 @@ class _JournalistStudioScreenState extends State<JournalistStudioScreen> {
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                          padding: EdgeInsets.fromLTRB(20, 0, 20, bottomClearance),
                           sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
                               (_, i) => _PostManageCard(
@@ -360,7 +363,7 @@ class _JournalistStudioScreenState extends State<JournalistStudioScreen> {
         if (!_loading && _profile != null)
           Positioned(
             right: 16,
-            bottom: bottomInset + 82,
+            bottom: systemInset + 82,
             child: FloatingActionButton.extended(
               onPressed: _openCompose,
               backgroundColor: NexusColors.teal,

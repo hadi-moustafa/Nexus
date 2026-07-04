@@ -14,9 +14,16 @@ import { welcomeEmailHtml } from "@/lib/email-templates";
  * for a session cookie and redirects the user into the app.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
+
+  // The dev server binds to 0.0.0.0 (all interfaces) but that is not a valid
+  // browser hostname. Cookies set for "0.0.0.0" won't be sent on subsequent
+  // requests, breaking the session. Always redirect to localhost in dev and
+  // to the configured app URL in production.
+  const rawOrigin = request.nextUrl.origin;
+  const origin = rawOrigin.replace("//0.0.0.0", "//localhost");
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);

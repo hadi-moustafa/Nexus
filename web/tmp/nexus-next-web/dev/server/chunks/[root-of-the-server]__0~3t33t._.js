@@ -116,9 +116,12 @@ async function requireAuth(request) {
         const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["createServiceClient"])();
         const { data, error } = await supabase.auth.getUser(token);
         if (error || !data.user) return unauthorized("Invalid or expired token");
+        const u = data.user;
         return {
-            userId: data.user.id,
-            email: data.user.email
+            userId: u.id,
+            email: u.email,
+            userMetadata: u.user_metadata ?? {},
+            appMetadata: u.app_metadata ?? {}
         };
     }
     // ── Web: cookie-based session via @supabase/ssr ───────────────────────────
@@ -142,7 +145,9 @@ async function requireAuth(request) {
         if (error || !user) return unauthorized();
         return {
             userId: user.id,
-            email: user.email
+            email: user.email,
+            userMetadata: user.user_metadata ?? {},
+            appMetadata: user.app_metadata ?? {}
         };
     } catch  {
         return unauthorized();

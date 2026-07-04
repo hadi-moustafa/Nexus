@@ -1,3 +1,34 @@
+/// Comment on a news article.
+class ArticleComment {
+  final String id;
+  final String body;
+  final String createdAt;
+  final String? editedAt;
+  final String authorId;
+  final String authorName;
+  final String? authorAvatar;
+
+  const ArticleComment({
+    required this.id,
+    required this.body,
+    required this.createdAt,
+    this.editedAt,
+    required this.authorId,
+    required this.authorName,
+    this.authorAvatar,
+  });
+
+  factory ArticleComment.fromJson(Map<String, dynamic> json) => ArticleComment(
+        id: json['id'] as String,
+        body: json['body'] as String,
+        createdAt: json['createdAt'] as String,
+        editedAt: json['editedAt'] as String?,
+        authorId: json['authorId'] as String,
+        authorName: json['authorName'] as String? ?? 'Anonymous',
+        authorAvatar: json['authorAvatar'] as String?,
+      );
+}
+
 /// Dart model for the Article type.
 /// Mirrors web/src/types/index.ts → Article exactly.
 class Article {

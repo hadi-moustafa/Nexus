@@ -1,5 +1,4 @@
 var R=require("./chunks/[turbopack]_runtime.js")("server/middleware.js")
-R.c("server/chunks/node_modules_@supabase_ssr_dist_module_index_108g0zw.js")
 R.c("server/chunks/node_modules_next_09b-t2q._.js")
 R.c("server/chunks/node_modules_@supabase_auth-js_dist_module_0vj9rfk._.js")
 R.c("server/chunks/node_modules_0~jf-hn._.js")

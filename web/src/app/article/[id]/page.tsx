@@ -3,11 +3,12 @@ import { ArrowLeft, ArrowRight, ExternalLink, Clock, Globe, BadgeCheck } from "l
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { getArticleById } from "@/lib/db/articles";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Navbar } from "@/components/layout/navbar";
 import { ReactionsBar } from "@/components/article/reactions-bar";
 import { CommentsSection } from "@/components/article/comments-section";
 import { ArticleViewTracker } from "@/components/article/view-tracker";
+import { BookmarkButton } from "@/components/article/bookmark-button";
 import type { Metadata } from "next";
 
 interface Props {
@@ -53,6 +54,18 @@ export default async function ArticlePage({ params }: Props) {
   const supabase = createClient(cookieStore);
   const { data: { user } } = await supabase.auth.getUser();
   const currentUserId = user?.id ?? null;
+
+  let initialBookmarked = false;
+  if (currentUserId) {
+    const serviceSupabase = createServiceClient();
+    const { data: bm } = await serviceSupabase
+      .from("bookmarks")
+      .select("id")
+      .eq("user_id", currentUserId)
+      .eq("article_id", article.id)
+      .maybeSingle();
+    initialBookmarked = !!bm;
+  }
 
   const readTime = estimateReadTime(article.content ?? article.summary);
   const isRtl = article.language === "ar";
@@ -107,7 +120,7 @@ export default async function ArticlePage({ params }: Props) {
           {article.title}
         </h1>
 
-        {/* Source + journalist + date */}
+        {/* Source + journalist + date + bookmark */}
         <div className="flex items-center gap-3 mb-6 pb-6 border-b border-[var(--border)]">
           <div className="w-8 h-8 rounded-lg border border-[var(--border)] bg-[var(--muted)] flex items-center justify-center shrink-0">
             <span className="text-xs font-bold text-[var(--text-secondary)] uppercase">
@@ -132,6 +145,9 @@ export default async function ArticlePage({ params }: Props) {
               <span>{formatDate(article.publishedAt)}</span>
             </div>
           </div>
+          {currentUserId && (
+            <BookmarkButton articleId={article.id} initialBookmarked={initialBookmarked} />
+          )}
         </div>
 
         {/* Hero image */}

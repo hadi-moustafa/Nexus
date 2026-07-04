@@ -4,9 +4,6 @@ class StripeService {
   StripeService._();
   static final instance = StripeService._();
 
-  static const String _paybackCallbackBase =
-      'com.example.nexus://payment-callback/';
-
   Future<SubscriptionStatus?> fetchSubscription() async {
     final response = await ApiClient.instance.get('/user/subscription');
     final data = response.data['data'];
@@ -14,15 +11,13 @@ class StripeService {
     return SubscriptionStatus.fromJson(data as Map<String, dynamic>);
   }
 
+  // The server builds the success/cancel URLs from NEXT_PUBLIC_APP_URL so
+  // they always point to a network-accessible address the phone's browser
+  // can reach — never localhost.
   Future<String> createCheckoutSession(String plan) async {
     final response = await ApiClient.instance.post(
       '/stripe/checkout',
-      data: {
-        'plan': plan,
-        'successUrl':
-            '$_paybackCallbackBase?status=success&session_id={CHECKOUT_SESSION_ID}',
-        'cancelUrl': '$_paybackCallbackBase?status=canceled',
-      },
+      data: {'plan': plan},
     );
     return response.data['data']['url'] as String;
   }

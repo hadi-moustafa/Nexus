@@ -1,39 +1,42 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import type { User } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
-export const updateSession = async (request: NextRequest) => {
+/**
+ * Refreshes the Supabase session cookie and returns both the response
+ * (with any updated cookies set) and the current user — so callers
+ * can make auth decisions without a second network round-trip.
+ */
+export const updateSession = async (
+  request: NextRequest
+): Promise<{ response: NextResponse; user: User | null }> => {
   let supabaseResponse = NextResponse.next({
-    request: {
-      headers: request.headers,
+    request: { headers: request.headers },
+  });
+
+  const supabase = createServerClient(supabaseUrl!, supabaseKey!, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+        supabaseResponse = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
+      },
     },
   });
 
-  const supabase = createServerClient(
-    supabaseUrl!,
-    supabaseKey!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+  // getUser() validates the JWT with Supabase and refreshes the token if
+  // needed. Must not be removed — this is what keeps the session alive.
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Refresh the session — do not remove this line
-  await supabase.auth.getUser();
-
-  return supabaseResponse;
+  return { response: supabaseResponse, user };
 };

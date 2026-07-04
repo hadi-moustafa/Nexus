@@ -1,22 +1,23 @@
-import * as net from "net";
 import * as tls from "tls";
+import * as dns from "dns";
 
-type SmtpState =
-  | "greeting"
-  | "ehlo"
-  | "starttls"
-  | "ehlo2"
-  | "auth"
-  | "mail_from"
-  | "rcpt_to"
-  | "data_cmd"
-  | "data_body"
-  | "quit";
+/** Connection-level failures worth retrying; SMTP protocol rejections (5xx) are not. */
+function isRetryable(err: unknown): boolean {
+  const codes = new Set(["ETIMEDOUT", "ECONNREFUSED", "ENETUNREACH", "ECONNRESET", "EHOSTUNREACH"]);
+  const errors: unknown[] =
+    err instanceof AggregateError ? err.errors : [err];
+  return errors.some((e) => codes.has((e as NodeJS.ErrnoException)?.code ?? ""));
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Send an HTML email via Gmail SMTP on port 587 (STARTTLS).
+ * Send an HTML email via Gmail SMTP on port 465 (SMTPS — direct TLS).
  * Requires SMTP_USER, SMTP_PASS, and optionally SMTP_FROM env vars.
  * When env vars are missing, logs and returns silently.
+ *
+ * Port 465 (direct TLS) is used instead of 587 (STARTTLS) because many
+ * ISPs and development networks block outbound port 587.
  */
 export async function sendMail(opts: {
   to: string;
@@ -31,6 +32,30 @@ export async function sendMail(opts: {
     console.warn("[mailer] SMTP not configured — skipping email to:", opts.to);
     return;
   }
+
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await sendOnce({ user, pass, from: from!, ...opts });
+      return;
+    } catch (err) {
+      const isLast = attempt === attempts;
+      if (!isRetryable(err) || isLast) throw err;
+      console.warn(`[mailer] send attempt ${attempt} failed, retrying:`, (err as Error).message);
+      await delay(attempt * 750);
+    }
+  }
+}
+
+async function sendOnce(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  user: string;
+  pass: string;
+  from: string;
+}): Promise<void> {
+  const { user, pass, from } = opts;
 
   const encodedSubject = /[^\x00-\x7F]/.test(opts.subject)
     ? `=?UTF-8?B?${Buffer.from(opts.subject, "utf8").toString("base64")}?=`
@@ -60,11 +85,11 @@ export async function sendMail(opts: {
       err ? reject(err) : resolve();
     };
 
+    type State = "greeting" | "ehlo" | "auth" | "mail_from" | "rcpt_to" | "data_cmd" | "data_body" | "quit";
+    let state: State = "greeting";
     let buf = "";
-    let state: SmtpState = "greeting";
-    let activeSocket: net.Socket | tls.TLSSocket;
 
-    const write = (cmd: string) => activeSocket.write(cmd + "\r\n");
+    const write = (cmd: string) => socket.write(cmd + "\r\n");
 
     const onFinalLine = (code: number, text: string) => {
       if (code >= 500) return settle(new Error(`SMTP ${code}: ${text}`));
@@ -76,34 +101,6 @@ export async function sendMail(opts: {
           break;
 
         case "ehlo":
-          if (code === 250) {
-            write("STARTTLS");
-            state = "starttls";
-          }
-          break;
-
-        case "starttls":
-          if (code === 220) {
-            buf = "";
-            const tlsSock = tls.connect(
-              { socket: plainSocket, servername: "smtp.gmail.com" },
-              () => {
-                activeSocket = tlsSock;
-                write("EHLO nexus.app");
-                state = "ehlo2";
-              }
-            );
-            tlsSock.on("data", handleData);
-            tlsSock.on("error", settle);
-            tlsSock.on("close", () => {
-              if (!settled) settle(new Error(`SMTP TLS closed in state: ${state}`));
-            });
-          } else {
-            settle(new Error(`SMTP STARTTLS failed ${code}: ${text}`));
-          }
-          break;
-
-        case "ehlo2":
           if (code === 250) {
             const plain = Buffer.from(`\0${user}\0${pass}`).toString("base64");
             write(`AUTH PLAIN ${plain}`);
@@ -140,7 +137,7 @@ export async function sendMail(opts: {
 
         case "data_cmd":
           if (code === 354) {
-            activeSocket.write(message);
+            socket.write(message);
             state = "data_body";
           } else {
             settle(new Error(`SMTP DATA failed ${code}: ${text}`));
@@ -157,7 +154,7 @@ export async function sendMail(opts: {
           break;
 
         case "quit":
-          activeSocket.end();
+          socket.end();
           settle();
           break;
       }
@@ -170,24 +167,37 @@ export async function sendMail(opts: {
         const line = buf.slice(0, idx);
         buf = buf.slice(idx + 2);
         if (!line) continue;
+        // Only process final lines in a multi-line response (4th char is space, not dash)
         if (line[3] !== "-") {
           onFinalLine(parseInt(line.slice(0, 3), 10), line.slice(4));
         }
       }
     };
 
-    // Port 587 = STARTTLS (plain TCP → upgrade to TLS after EHLO)
-    // More commonly open than 465 (SMTPS)
-    const plainSocket = net.createConnection({ host: "smtp.gmail.com", port: 587 });
-    activeSocket = plainSocket;
+    // Port 465 = SMTPS: TLS from the first byte, no STARTTLS handshake needed.
+    // Force IPv4 resolution — this environment has no real IPv6 route, so letting
+    // Node resolve/attempt AAAA records only adds a guaranteed-failing attempt.
+    const socket = tls.connect(
+      {
+        host: "smtp.gmail.com",
+        port: 465,
+        servername: "smtp.gmail.com",
+        lookup: (hostname, options, callback) =>
+          dns.lookup(hostname, { ...options, family: 4 }, callback),
+      },
+      () => { /* TLS established — wait for server greeting */ }
+    );
 
-    plainSocket.on("data", handleData);
-    plainSocket.on("error", settle);
-    plainSocket.on("close", () => {
-      // Only fail on unexpected close (not after TLS takes over the socket)
-      if (!settled && state !== "quit" && state !== "starttls") {
-        settle(new Error(`SMTP plain socket closed in state: ${state}`));
-      }
+    socket.setTimeout(10_000, () => {
+      socket.destroy();
+      const err = Object.assign(new Error("SMTP connection timed out"), { code: "ETIMEDOUT" });
+      settle(err);
+    });
+
+    socket.on("data", handleData);
+    socket.on("error", settle);
+    socket.on("close", () => {
+      if (!settled) settle(new Error(`SMTP socket closed unexpectedly in state: ${state}`));
     });
   });
 }

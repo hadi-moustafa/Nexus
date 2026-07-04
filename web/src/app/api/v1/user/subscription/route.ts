@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * GET /api/v1/user/subscription
@@ -97,6 +98,13 @@ export async function DELETE(request: NextRequest) {
       .from("subscriptions")
       .update({ auto_renew: false, updated_at: new Date().toISOString() })
       .eq("user_id", auth.userId);
+
+    void createNotification(
+      auth.userId,
+      "subscription_canceled",
+      "Subscription canceled",
+      "Your Premium access continues until the end of the current billing period."
+    );
 
     return NextResponse.json({ data: { canceled: true } });
   } catch (err) {

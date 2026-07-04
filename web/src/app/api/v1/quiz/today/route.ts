@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * GET /api/v1/quiz/today
@@ -12,7 +13,7 @@ import { createServiceClient } from "@/lib/supabase/server";
  * alreadyCompleted is true if the authenticated user already submitted
  * a quiz today (any quiz).
  */
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServiceClient();
 
@@ -42,16 +43,23 @@ export async function GET(_request: NextRequest) {
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
     const quiz = pool[daysSinceEpoch % pool.length];
 
-    // Check if current user already completed a quiz today
+    // Check if current user already completed a quiz today.
+    // requireAuth reads the session cookie (web) or Bearer token (mobile) —
+    // unlike supabase.auth.getUser() on the service client which has no
+    // session context and always returns null.
     let alreadyCompleted = false;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
+    const auth = await requireAuth(request);
+    if (!(auth instanceof NextResponse)) {
+      const nextDay = new Date(today);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = nextDay.toISOString().slice(0, 10);
+
       const { data: result } = await supabase
         .from("quiz_results")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", auth.userId)
         .gte("completed_at", `${today}T00:00:00.000Z`)
-        .lt("completed_at", `${today}T23:59:59.999Z`)
+        .lt("completed_at", `${nextDayStr}T00:00:00.000Z`)
         .maybeSingle();
 
       if (result) alreadyCompleted = true;

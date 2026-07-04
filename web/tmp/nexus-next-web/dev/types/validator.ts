@@ -227,6 +227,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../../src/app/payment-callback/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/payment-callback">> = Specific
+  const handler = {} as typeof import("../../../../src/app/payment-callback/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../../src/app/premium/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/premium">> = Specific

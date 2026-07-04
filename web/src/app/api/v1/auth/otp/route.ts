@@ -88,14 +88,26 @@ export async function POST(request: NextRequest) {
         console.log(`└────────────────────────────────────────┘\n`);
       }
 
-      const { error: insertErr } = await service.from("otp_codes").insert({
+      // Supabase's REST endpoint occasionally drops a connection ("fetch failed")
+      // under transient network conditions — retry once before giving up, since
+      // a blip here would otherwise block the OTP from ever being sent.
+      let insertErr = (await service.from("otp_codes").insert({
         email,
         code_hash: hashOtp(code),
         expires_at: expiresAt,
-      });
+      })).error;
 
       if (insertErr) {
-        console.error("[otp/send] DB insert failed:", insertErr.message);
+        console.warn("[otp/send] DB insert failed, retrying once:", insertErr.message);
+        insertErr = (await service.from("otp_codes").insert({
+          email,
+          code_hash: hashOtp(code),
+          expires_at: expiresAt,
+        })).error;
+      }
+
+      if (insertErr) {
+        console.error("[otp/send] DB insert failed after retry:", insertErr.message);
         return NextResponse.json(
           { error: { code: "INTERNAL_ERROR", message: "Failed to create verification code" } },
           { status: 500 }
@@ -175,23 +187,40 @@ export async function POST(request: NextRequest) {
       if (!createErr && created.user) {
         userId = created.user.id;
       } else {
-        // User already exists in auth.users — look up their ID from public.users
-        // and update their password + confirm status (OTP proves ownership).
-        const { data: existingRow } = await service
-          .from("users")
-          .select("id")
-          .eq("email", email)
-          .maybeSingle();
+        // User already exists in auth.users. It may not have a matching public.users
+        // row yet (e.g. the sign-up trigger never ran for it) — so look the account
+        // up directly in auth.users via the admin API rather than depending on
+        // public.users, and update their password + confirm status (OTP proves ownership).
+        const { data: linkData, error: linkErr } = await service.auth.admin.generateLink({
+          type: "recovery",
+          email,
+        });
 
-        if (!existingRow?.id) {
-          console.error("[otp/verify] createUser failed and user not in public.users:", createErr?.message);
+        if (linkErr || !linkData.user) {
+          console.error("[otp/verify] createUser failed and account lookup failed:", createErr?.message, linkErr?.message);
           return NextResponse.json(
             { error: { code: "INTERNAL_ERROR", message: "Failed to create account" } },
             { status: 500 }
           );
         }
 
-        userId = existingRow.id as string;
+        userId = linkData.user.id;
+
+        // Self-heal: ensure a public.users row exists for this account. If they'd
+        // already been approved as a journalist before the row went missing,
+        // restore that role instead of silently downgrading them back to "user".
+        const { data: approvedRequest } = await service
+          .from("journalist_requests")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("status", "approved")
+          .maybeSingle();
+
+        await service.from("users").upsert(
+          { id: userId, email, role: approvedRequest ? "journalist" : "user" },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
+
         const { error: updateErr } = await service.auth.admin.updateUserById(userId, {
           password,
           email_confirm: true,
